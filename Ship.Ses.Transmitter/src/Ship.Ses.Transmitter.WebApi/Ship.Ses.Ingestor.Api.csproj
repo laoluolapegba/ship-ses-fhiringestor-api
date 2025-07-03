@@ -17,6 +17,7 @@
       <PrivateAssets>all</PrivateAssets>
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
     </PackageReference>  
+    <PackageReference Include="Microsoft.VisualStudio.Azure.Containers.Tools.Targets" Version="1.22.1-Preview.1" />  
     <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="9.0.3" />  
     <PackageReference Include="Scalar.AspNetCore" Version="1.2.45" />  
     <PackageReference Include="Swashbuckle.AspNetCore" Version="9.0.1" />  
@@ -30,6 +31,9 @@
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
     <NoWarn>$(NoWarn);1591</NoWarn>
     <DocumentationFile>Ship.Ses.Transmitter.WebApi.xml</DocumentationFile>
+    <UserSecretsId>fb2667ee-c120-4be8-835f-32b62865e199</UserSecretsId>
+    <DockerDefaultTargetOS>Linux</DockerDefaultTargetOS>
+    <DockerfileContext>..\..\..</DockerfileContext>
   </PropertyGroup>
   <ItemGroup>
     <Folder Include="Models\" />
