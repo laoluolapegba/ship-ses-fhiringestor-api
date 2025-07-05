@@ -11,6 +11,7 @@ using System.Net;
 using Microsoft.AspNetCore.Authorization;
 using System.Security.Claims;
 using Ship.Ses.Transmitter.Application.Interfaces;
+using Ship.Ses.Ingestor.Api.Helper;
 namespace Ship.Ses.Transmitter.WebApi.Controllers.v1
 {
 
@@ -28,14 +29,15 @@ namespace Ship.Ses.Transmitter.WebApi.Controllers.v1
         private readonly ILogger<FhirIngestController> _logger;
         private readonly IClientSyncConfigProvider _clientConfig;
 
-        public FhirIngestController(IFhirIngestService ingestService, ILogger<FhirIngestController> logger, IClientSyncConfigProvider clientConfig)
+        public FhirIngestController(
+            IFhirIngestService ingestService,
+            ILogger<FhirIngestController> logger,
+            IClientSyncConfigProvider clientConfig)
         {
             _ingestService = ingestService;
             _logger = logger;
             _clientConfig = clientConfig;
         }
-
-        
 
         /// <summary>
         /// Accepts a FHIR-compliant resource payload and stores it for processing.
@@ -49,8 +51,6 @@ namespace Ship.Ses.Transmitter.WebApi.Controllers.v1
             OperationId = "FhirIngest_SubmitResource",
             Tags = new[] { "FHIR Ingest" }
         )]
-
-        //[SwaggerRequestExample(typeof(FhirIngestRequest), typeof(FhirIngestRequestExample))]
         [ProducesResponseType(typeof(object), 200)]
         [ProducesResponseType(typeof(string), 400)]
         [ProducesResponseType(typeof(string), 500)]
@@ -61,21 +61,22 @@ namespace Ship.Ses.Transmitter.WebApi.Controllers.v1
                 _logger.LogWarning("❌ Request body is null.");
                 return BadRequest("Request cannot be null.");
             }
-            var clientId = User.FindFirst("client_id")?.Value
-                    ?? User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
 
-            if (string.IsNullOrEmpty(clientId))
+            var clientIdClaim = User.FindFirst("client_id");
+            if (clientIdClaim == null || string.IsNullOrWhiteSpace(clientIdClaim.Value))
             {
-                _logger.LogWarning("❌ Could not extract client_id from JWT claims");
-                return Unauthorized(new { message = "Missing or invalid authentication context" });
+                _logger.LogWarning("❌ Missing 'client_id' claim in token.");
+                return Unauthorized(new { message = "Missing or invalid authentication context." });
             }
 
-            _logger.LogInformation("🔐 Authenticated request from client: {ClientId}", clientId);
+            var clientId = SafeMessageHelper.Sanitize(clientIdClaim.Value);
+
             if (!await _clientConfig.IsClientActiveAsync(clientId))
             {
                 _logger.LogWarning("❌ Unknown or inactive client attempted ingestion: {ClientId}", clientId);
                 return Unauthorized(new { message = $"Client '{clientId}' is not registered or not active" });
             }
+
             if (string.IsNullOrWhiteSpace(request.ResourceType))
             {
                 _logger.LogWarning("❌ Missing required field: ResourceType");
@@ -84,7 +85,7 @@ namespace Ship.Ses.Transmitter.WebApi.Controllers.v1
 
             try
             {
-                _logger.LogInformation("📥 Ingesting FHIR resource of type {ResourceType} from EMR source.", request.ResourceType);
+                _logger.LogInformation("📥 Ingesting FHIR resource of type {ResourceType} from EMR source.", SafeMessageHelper.Sanitize(request.ResourceType));
                 await _ingestService.IngestAsync(request, clientId);
 
                 return Accepted(new
@@ -96,8 +97,8 @@ namespace Ship.Ses.Transmitter.WebApi.Controllers.v1
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "🔥 Unexpected error during FHIR ingest.");
-                return StatusCode(500, "Internal server error.");
+                _logger.LogError(SafeMessageHelper.Sanitize(ex), "🔥 Unexpected error during FHIR ingest.");
+                return StatusCode(500, new { error = "Unexpected error occurred while processing the request." });
             }
         }
     }

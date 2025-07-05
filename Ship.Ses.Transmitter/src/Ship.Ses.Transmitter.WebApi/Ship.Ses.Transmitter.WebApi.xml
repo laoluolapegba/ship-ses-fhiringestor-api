@@ -16,5 +16,19 @@
             <param name="request">FHIR resource wrapper with metadata</param>
             <returns>A success or error response</returns>
         </member>
+        <member name="M:Ship.Ses.Ingestor.Api.Helper.SafeMessageHelper.Sanitize(System.String)">
+            <summary>
+            Sanitizes a string for safe use in logs or user-facing messages by removing control characters like CR, LF, and tabs.
+            </summary>
+            <param name="input">The potentially unsafe string.</param>
+            <returns>A sanitized version of the input string.</returns>
+        </member>
+        <member name="M:Ship.Ses.Ingestor.Api.Helper.SafeMessageHelper.Sanitize(System.Object)">
+            <summary>
+            Sanitizes any object by converting to string and applying sanitization.
+            </summary>
+            <param name="input">Any object to sanitize.</param>
+            <returns>Sanitized string.</returns>
+        </member>
     </members>
 </doc>

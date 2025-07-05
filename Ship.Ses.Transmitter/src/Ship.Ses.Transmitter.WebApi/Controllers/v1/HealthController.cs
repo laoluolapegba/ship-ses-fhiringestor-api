@@ -10,11 +10,11 @@ namespace Ship.Ses.Transmitter.WebApi.Controllers.v1
     [ApiVersionNeutral] // Important: Health endpoints are usually version-neutral
     public class HealthController : ControllerBase
     {
-        // You might inject services here that perform actual health checks
+        // inject services here that perform actual health checks
         // private readonly IDatabaseHealthCheckService _dbHealthCheck;
         // private readonly IMessageBrokerHealthCheckService _mbHealthCheck;
 
-        public HealthController(/* injected services */)
+        public HealthController()
         {
             // _dbHealthCheck = dbHealthCheck;
             // _mbHealthCheck = mbHealthCheck;
@@ -22,42 +22,38 @@ namespace Ship.Ses.Transmitter.WebApi.Controllers.v1
 
         [HttpGet]
         [ProducesResponseType(typeof(ApiHealthStatusDto), StatusCodes.Status200OK)]
-        [ProducesResponseType(StatusCodes.Status503ServiceUnavailable)] // If overall status is unhealthy
+        [ProducesResponseType(StatusCodes.Status503ServiceUnavailable)]
         public async Task<IActionResult> GetHealthStatus()
         {
             var stopwatch = Stopwatch.StartNew();
             var healthStatus = new ApiHealthStatusDto
             {
                 CheckedAtUtc = DateTime.UtcNow,
-                ApiVersion = Assembly.GetEntryAssembly()?.GetName().Version?.ToString() ?? "Unknown",
-                OverallStatus = "Healthy" // Assume healthy unless a component indicates otherwise
+                ApiVersion = "1.0.0",
+                OverallStatus = "Healthy"
             };
 
-            // --- Perform actual health checks for components ---
-            // Example: Database Health Check
+            // Database health check
             var dbComponent = new ComponentHealthStatusDto { Name = "Database" };
             var dbStopwatch = Stopwatch.StartNew();
             try
             {
-                // Call your actual database health check logic here
-                // bool isDbHealthy = await _dbHealthCheck.CheckAsync();
-                bool isDbHealthy = true; // Placeholder for demo
-                if (isDbHealthy)
-                {
-                    dbComponent.Status = "Healthy";
-                    dbComponent.Description = "Database connection successful.";
-                }
-                else
-                {
-                    dbComponent.Status = "Unhealthy";
-                    dbComponent.Description = "Failed to connect to the database.";
-                    healthStatus.OverallStatus = "Degraded"; // Or "Unhealthy" if critical
-                }
+                bool isDbHealthy = true; // Replace with actual check
+
+                dbComponent.Status = isDbHealthy ? "Healthy" : "Unhealthy";
+                dbComponent.Description = isDbHealthy
+                    ? "Database connection successful."
+                    : "Failed to connect to the database.";
+
+                if (!isDbHealthy)
+                    healthStatus.OverallStatus = "Unhealthy";
             }
             catch (Exception ex)
             {
                 dbComponent.Status = "Unhealthy";
-                dbComponent.Description = $"Database check failed: {ex.Message}";
+                dbComponent.Description = "Database check failed.";
+                                                                    
+                Console.Error.WriteLine($"[ERROR] DB Health Check: {ex.Message}");
                 healthStatus.OverallStatus = "Unhealthy";
             }
             finally
@@ -67,31 +63,26 @@ namespace Ship.Ses.Transmitter.WebApi.Controllers.v1
                 healthStatus.Components.Add(dbComponent);
             }
 
-            // Example: Message Broker Health Check
+            // Message broker health check
             var mbComponent = new ComponentHealthStatusDto { Name = "Message Broker" };
             var mbStopwatch = Stopwatch.StartNew();
             try
             {
-                // Call your actual message broker health check logic here
-                // bool isMbHealthy = await _mbHealthCheck.CheckAsync();
-                bool isMbHealthy = true; // Placeholder for demo
-                if (isMbHealthy)
-                {
-                    mbComponent.Status = "Healthy";
-                    mbComponent.Description = "Message broker connected.";
-                }
-                else
-                {
-                    mbComponent.Status = "Degraded";
-                    mbComponent.Description = "Could not send test message to broker.";
-                    if (healthStatus.OverallStatus != "Unhealthy") // Don't downgrade from Unhealthy
-                        healthStatus.OverallStatus = "Degraded";
-                }
+                bool isMbHealthy = true; // Replace with actual check
+
+                mbComponent.Status = isMbHealthy ? "Healthy" : "Degraded";
+                mbComponent.Description = isMbHealthy
+                    ? "Message broker connected."
+                    : "Could not send test message to broker.";
+
+                if (!isMbHealthy && healthStatus.OverallStatus != "Unhealthy")
+                    healthStatus.OverallStatus = "Degraded";
             }
             catch (Exception ex)
             {
                 mbComponent.Status = "Unhealthy";
-                mbComponent.Description = $"Message broker check failed: {ex.Message}";
+                mbComponent.Description = "Message broker check failed.";
+                Console.Error.WriteLine($"[ERROR] Message Broker Check: {ex.Message}");
                 healthStatus.OverallStatus = "Unhealthy";
             }
             finally
@@ -100,19 +91,14 @@ namespace Ship.Ses.Transmitter.WebApi.Controllers.v1
                 mbComponent.DurationMilliseconds = mbStopwatch.ElapsedMilliseconds;
                 healthStatus.Components.Add(mbComponent);
             }
-            // --- End of health checks ---
 
+            // Final result
             stopwatch.Stop();
             healthStatus.TotalDurationMilliseconds = stopwatch.ElapsedMilliseconds;
 
-            if (healthStatus.OverallStatus == "Unhealthy")
-            {
-                return StatusCode(StatusCodes.Status503ServiceUnavailable, healthStatus);
-            }
-            else
-            {
-                return Ok(healthStatus);
-            }
+            return healthStatus.OverallStatus == "Unhealthy"
+                ? StatusCode(StatusCodes.Status503ServiceUnavailable, healthStatus)
+                : Ok(healthStatus);
         }
     }
 }

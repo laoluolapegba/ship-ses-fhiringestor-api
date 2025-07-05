@@ -1,5 +1,6 @@
-﻿using System.Text.Json.Nodes;
-using Swashbuckle.AspNetCore.Annotations;
+﻿using Swashbuckle.AspNetCore.Annotations;
+using System.ComponentModel.DataAnnotations;
+using System.Text.Json.Nodes;
 namespace Ship.Ses.Transmitter.Domain.Patients
 {
     /// <summary>
@@ -11,18 +12,23 @@ namespace Ship.Ses.Transmitter.Domain.Patients
         /// The FHIR resource type (e.g., Patient, Encounter)
         /// </summary>
         [SwaggerSchema("The type of FHIR resource to ingest.", Nullable = false)]
+        [Required(ErrorMessage = "ResourceType is required.")]
+        [StringLength(100, ErrorMessage = "ResourceType must not exceed 100 characters.")]
         public string ResourceType { get; set; }
 
         /// <summary>
         /// The client-assigned resource ID (optional)
         /// </summary>
         [SwaggerSchema("Optional EMR-assigned resource identifier.")]
+        [StringLength(100, ErrorMessage = "ResourceId must not exceed 100 characters.")]
         public string ResourceId { get; set; }
 
         /// <summary>
         /// The actual FHIR-compliant JSON object
         /// </summary>
         [SwaggerSchema("FHIR-compliant resource body as JSON.")]
+        [Required(ErrorMessage = "FhirJson is required.")]
+        [DataType(DataType.MultilineText)]
         public JsonObject FhirJson { get; set; }
 
         /// <summary>
