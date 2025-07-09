@@ -17,7 +17,8 @@ namespace Ship.Ses.Transmitter.WebApi.Installers
             // NOTE: "ApiVersion" is not set in the OpenApiInfo if there's only one version.
             foreach (var description in _provider.ApiVersionDescriptions)
             {
-                options.SwaggerDoc(description.GroupName, CreateInfoForApiVersion(description));
+                options.SwaggerDoc(description.GroupName, 
+                    CreateInfoForApiVersion(description));
             }
         }
 
@@ -28,7 +29,7 @@ namespace Ship.Ses.Transmitter.WebApi.Installers
                 Title = $"SHIP SES FHIR Ingest API {description.ApiVersion}",
                 Version = description.ApiVersion.ToString(),
                 Description = "API for receiving FHIR-compliant data from EMRs.",
-                Contact = new OpenApiContact { Name = "Interswitch", Email = "contact@interswitchgroup.com" },
+                Contact = new OpenApiContact { Name = "Interswitch", Email = "contact@interswitchng.com" },
                 //License = new OpenApiLicense { Name = "MIT License", Url = new Uri("https://opensource.org/licenses/MIT") } // Example license
             };
 

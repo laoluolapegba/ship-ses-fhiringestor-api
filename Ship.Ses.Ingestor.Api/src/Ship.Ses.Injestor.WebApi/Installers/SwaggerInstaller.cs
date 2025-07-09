@@ -15,7 +15,7 @@ namespace Ship.Ses.Transmitter.WebApi.Installers
             builder.Services.AddControllers();
             //builder.Services.AddSwaggerExamplesFromAssemblyOf<Program>();
             //Configure Swagger/OpenAPI
-            builder.Services.AddTransient<IConfigureOptions<SwaggerGenOptions>, ConfigureSwaggerOptions>(); // This is key for versioning with Swagger
+            builder.Services.AddTransient<IConfigureOptions<SwaggerGenOptions>, ConfigureSwaggerOptions>(); 
 
             builder.Services.AddSwaggerGen(options =>
             {
@@ -27,7 +27,7 @@ namespace Ship.Ses.Transmitter.WebApi.Installers
                 options.IncludeXmlComments(xmlPath);
 
                 // Add Swagger security definition and requirement here
-                options.AddSwaggerSecurityDefinition(); // <--- Call the new extension method
+                options.AddSwaggerSecurityDefinition(); 
 
             });
         }

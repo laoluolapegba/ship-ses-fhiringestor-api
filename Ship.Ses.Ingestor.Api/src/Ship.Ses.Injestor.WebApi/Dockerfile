@@ -12,13 +12,13 @@ EXPOSE 8081
 FROM mcr.microsoft.com/dotnet/sdk:9.0 AS build
 ARG BUILD_CONFIGURATION=Release
 WORKDIR /src
-COPY ["Ship.Ses.Transmitter/src/Ship.Ses.Transmitter.WebApi/Ship.Ses.Ingestor.Api.csproj", "Ship.Ses.Transmitter/src/Ship.Ses.Transmitter.WebApi/"]
-COPY ["Ship.Ses.Transmitter/src/Ship.Ses.Transmitter.Infrastructure/Ship.Ses.Transmitter.Infrastructure.csproj", "Ship.Ses.Transmitter/src/Ship.Ses.Transmitter.Infrastructure/"]
-COPY ["Ship.Ses.Transmitter/src/Ship.Ses.Transmitter.Application/Ship.Ses.Transmitter.Application.csproj", "Ship.Ses.Transmitter/src/Ship.Ses.Transmitter.Application/"]
-COPY ["Ship.Ses.Transmitter/src/Ship.Ses.Transmitter.Domain/Ship.Ses.Transmitter.Domain.csproj", "Ship.Ses.Transmitter/src/Ship.Ses.Transmitter.Domain/"]
-RUN dotnet restore "./Ship.Ses.Transmitter/src/Ship.Ses.Transmitter.WebApi/Ship.Ses.Ingestor.Api.csproj"
+COPY ["Ship.Ses.Ingestor.Api/src/Ship.Ses.Injestor.WebApi/Ship.Ses.Ingestor.Api.csproj", "Ship.Ses.Ingestor.Api/src/Ship.Ses.Injestor.WebApi/"]
+COPY ["Ship.Ses.Ingestor.Api/src/Ship.Ses.Transmitter.Infrastructure/Ship.Ses.Transmitter.Infrastructure.csproj", "Ship.Ses.Ingestor.Api/src/Ship.Ses.Transmitter.Infrastructure/"]
+COPY ["Ship.Ses.Ingestor.Api/src/Ship.Ses.Transmitter.Application/Ship.Ses.Transmitter.Application.csproj", "Ship.Ses.Ingestor.Api/src/Ship.Ses.Transmitter.Application/"]
+COPY ["Ship.Ses.Ingestor.Api/src/Ship.Ses.Transmitter.Domain/Ship.Ses.Transmitter.Domain.csproj", "Ship.Ses.Ingestor.Api/src/Ship.Ses.Transmitter.Domain/"]
+RUN dotnet restore "./Ship.Ses.Ingestor.Api/src/Ship.Ses.Injestor.WebApi/Ship.Ses.Ingestor.Api.csproj"
 COPY . .
-WORKDIR "/src/Ship.Ses.Transmitter/src/Ship.Ses.Transmitter.WebApi"
+WORKDIR "/src/Ship.Ses.Ingestor.Api/src/Ship.Ses.Injestor.WebApi"
 RUN dotnet build "./Ship.Ses.Ingestor.Api.csproj" -c $BUILD_CONFIGURATION -o /app/build
 
 # This stage is used to publish the service project to be copied to the final stage

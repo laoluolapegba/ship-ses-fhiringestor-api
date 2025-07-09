@@ -19,7 +19,7 @@ namespace Ship.Ses.Transmitter.WebApi.Controllers.v1
     /// Allows EMRs to submit FHIR-compliant resources into the SHIP SES platform.
     /// </summary>
     [ApiController]
-    [ApiVersion("1.0")]
+    [Asp.Versioning.ApiVersion("1.0")]
     [Route("api/v{version:apiVersion}/fhir-ingest")]
     [SwaggerTag("Endpoints for ingesting FHIR-compliant resources from external EMRs.")]
     [Authorize]

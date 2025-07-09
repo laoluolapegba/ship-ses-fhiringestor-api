@@ -1,4 +1,5 @@
-﻿using Microsoft.AspNetCore.Mvc;
+﻿using Asp.Versioning;
+using Microsoft.AspNetCore.Mvc;
 using Ship.Ses.Transmitter.Application.DTOs;
 using System.Diagnostics;
 using System.Reflection;
