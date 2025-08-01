@@ -10,58 +10,58 @@ namespace Ship.Ses.Transmitter.Infrastructure.Installers
 {
     public static class AuthenticationInstaller
     {
-        public static void InstallAuthentication(this WebApplicationBuilder builder)
-        {
-            var authentication = builder.Configuration.GetSection(nameof(AppSettings)).Get<AppSettings>()!.Authentication;
-            builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
-                .AddJwtBearer(options =>
-                {
-                    options.Authority = authentication.Authority;
-                    options.Audience = authentication.Audience;
-                    options.RequireHttpsMetadata = false; //TODO: set to true on production env
-                    options.TokenValidationParameters = new TokenValidationParameters
-                    {
-                        ValidateIssuer = true,
-                        ValidateAudience = true,
-                        ValidateLifetime = true,
-                        ValidateIssuerSigningKey = true
-                    };
+        //public static void InstallAuthentication(this WebApplicationBuilder builder)
+        //{
+        //    var authentication = builder.Configuration.GetSection(nameof(AppSettings)).Get<AppSettings>()!.Authentication;
+        //    builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
+        //        .AddJwtBearer(options =>
+        //        {
+        //            options.Authority = authentication.Authority;
+        //            options.Audience = authentication.Audience;
+        //            options.RequireHttpsMetadata = false; //TODO: set to true on production env
+        //            options.TokenValidationParameters = new TokenValidationParameters
+        //            {
+        //                ValidateIssuer = true,
+        //                ValidateAudience = true,
+        //                ValidateLifetime = true,
+        //                ValidateIssuerSigningKey = true
+        //            };
 
-                    options.Events = new JwtBearerEvents
-                    {
-                        OnTokenValidated = context =>
-                        {
-                            var claimsIdentity = context.Principal.Identity as System.Security.Claims.ClaimsIdentity;
-                            if (claimsIdentity == null)
-                                return Task.CompletedTask;
+        //            options.Events = new JwtBearerEvents
+        //            {
+        //                OnTokenValidated = context =>
+        //                {
+        //                    var claimsIdentity = context.Principal.Identity as System.Security.Claims.ClaimsIdentity;
+        //                    if (claimsIdentity == null)
+        //                        return Task.CompletedTask;
 
-                            var resourceAccessClaim = claimsIdentity.FindFirst("resource_access")?.Value;
-                            if (!string.IsNullOrEmpty(resourceAccessClaim))
-                            {
-                                var resourceAccess = JsonSerializer.Deserialize<JsonElement>(resourceAccessClaim);
+        //                    var resourceAccessClaim = claimsIdentity.FindFirst("resource_access")?.Value;
+        //                    if (!string.IsNullOrEmpty(resourceAccessClaim))
+        //                    {
+        //                        var resourceAccess = JsonSerializer.Deserialize<JsonElement>(resourceAccessClaim);
 
-                                if (resourceAccess.TryGetProperty(authentication.ClientId, out var mykidClientRoles))
-                                {
-                                    if (mykidClientRoles.TryGetProperty("roles", out var roles))
-                                    {
-                                        foreach (var role in roles.EnumerateArray())
-                                        {
-                                            claimsIdentity.AddClaim(new System.Security.Claims.Claim("Role", role.GetString()));
-                                        }
-                                    }
-                                }
-                            }
+        //                        if (resourceAccess.TryGetProperty(authentication.ClientId, out var mykidClientRoles))
+        //                        {
+        //                            if (mykidClientRoles.TryGetProperty("roles", out var roles))
+        //                            {
+        //                                foreach (var role in roles.EnumerateArray())
+        //                                {
+        //                                    claimsIdentity.AddClaim(new System.Security.Claims.Claim("Role", role.GetString()));
+        //                                }
+        //                            }
+        //                        }
+        //                    }
 
-                            return Task.CompletedTask;
-                        }
-                    };
-                });
+        //                    return Task.CompletedTask;
+        //                }
+        //            };
+        //        });
 
-            builder.Services.AddAuthorization(options =>
-            {
-                options.AddPolicy("AdminPolicy", policy =>
-                    policy.RequireClaim("Role", "admin-role"));
-            });
-        }
+        //    builder.Services.AddAuthorization(options =>
+        //    {
+        //        options.AddPolicy("AdminPolicy", policy =>
+        //            policy.RequireClaim("Role", "admin-role"));
+        //    });
+        //}
     }
 }

@@ -1,20 +1,22 @@
-﻿using Ship.Ses.Transmitter.Infrastructure.Installers;
-using Scalar.AspNetCore;
-using Ship.Ses.Transmitter.WebApi.Installers;
+﻿using Asp.Versioning;
+using Asp.Versioning.ApiExplorer;
 using Microsoft.AspNetCore.Server.Kestrel.Core;
-using Ship.Ses.Transmitter.Application.Patients;
-using Ship.Ses.Transmitter.Infrastructure.Persistance;
-using MongoDB.Driver;
-using Ship.Ses.Transmitter.Infrastructure.Settings;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
+using MongoDB.Driver;
+using Scalar.AspNetCore;
 using Ship.Ses.Transmitter.Application.Interfaces;
+using Ship.Ses.Transmitter.Application.Patients;
+using Ship.Ses.Transmitter.Application.Shared;
 using Ship.Ses.Transmitter.Domain.Patients;
+using Ship.Ses.Transmitter.Infrastructure.Installers;
+using Ship.Ses.Transmitter.Infrastructure.Persistance;
 using Ship.Ses.Transmitter.Infrastructure.Persistance.Configuration.Domain;
 using Ship.Ses.Transmitter.Infrastructure.Persistance.Configuration.Domain.Sync;
-using Microsoft.EntityFrameworkCore;
 using Ship.Ses.Transmitter.Infrastructure.Persistance.MySql;
-using Asp.Versioning.ApiExplorer;
-using Asp.Versioning;
+using Ship.Ses.Transmitter.Infrastructure.Settings;
+using Ship.Ses.Transmitter.Infrastructure.Shared;
+using Ship.Ses.Transmitter.WebApi.Installers;
 var builder = WebApplication.CreateBuilder(args);
 // Add services to the container.
 builder.Services.AddOktaAuthentication(builder.Configuration);
@@ -36,8 +38,9 @@ builder.Services.AddSingleton<IMongoClient>(s =>
 });
 // Register IMongoSyncRepository as a Scoped service
 builder.Services.AddScoped<IMongoSyncRepository, MongoSyncRepository>();
+builder.Services.AddScoped<IHealthService, HealthService>();
 
-// ✅ Register Services & Observability
+// Register Services & Observability
 builder.Services.ConfigureTracing(builder.Configuration);
 
 var appSettings = builder.Configuration.GetSection(nameof(AppSettings)).Get<AppSettings>();
@@ -54,7 +57,7 @@ else
 {
     throw new Exception("AppSettings not found");
 }
-// ... (IClientSyncConfigProvider) ...
+
 builder.Services.AddScoped<IClientSyncConfigProvider, EfClientSyncConfigProvider>();
 
 // Register IFhirIngestService 
@@ -112,24 +115,39 @@ app.UseSwaggerUI(options =>
     {
         options.SwaggerEndpoint($"/swagger/{description.GroupName}/swagger.json", $"FHIR Ingest API {description.GroupName.ToUpperInvariant()}");
     }
-    options.RoutePrefix = "swagger"; // Sets the Swagger UI at /swagger
+    options.RoutePrefix = "swagger"; 
 });
 
 // Configure the HTTP request pipeline.
 if (app.Environment.IsDevelopment())
 {
+    app.UseHttpsRedirection();
     app.MapOpenApi();
     app.MapScalarApiReference();
 }
 
 app.UseCors(CorsInstaller.DefaultCorsPolicyName);
-app.UseHttpsRedirection();
 
 app.UseAuthentication();
 app.UseAuthorization();
 
 app.MapControllers();
+var server = app.Services.GetRequiredService<Microsoft.AspNetCore.Hosting.Server.IServer>();
+var addresses = server.Features.Get<Microsoft.AspNetCore.Hosting.Server.Features.IServerAddressesFeature>();
 
-//app.UseExceptionHandler();
+if (addresses != null)
+{
+    foreach (var address in addresses.Addresses)
+    {
+        app.Logger.LogInformation("✅ Application is listening on: {Address}", address);
+    }
+}
+else
+{
+    app.Logger.LogWarning("⚠️ Could not determine server addresses (no IServerAddressesFeature found).");
+}
+
+app.Logger.LogInformation("SHIP SeS Ingestor API started and ready to accept requests");
+
 
 app.Run();

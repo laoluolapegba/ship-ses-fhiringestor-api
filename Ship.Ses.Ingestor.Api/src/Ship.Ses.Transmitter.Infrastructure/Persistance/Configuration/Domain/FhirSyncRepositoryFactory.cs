@@ -12,16 +12,8 @@ namespace Ship.Ses.Transmitter.Infrastructure.Persistance.Configuration.Domain
 {
     public class FhirSyncRepositoryFactory : IFhirSyncRepositoryFactory
     {
-        private readonly IMongoDatabase _database;
+        //private readonly IMongoDatabase _database;
 
-        //public FhirSyncRepositoryFactory(IMongoClient mongoClient, IOptions<SourceDbSettings> options)
-        //{
-        //    _database = mongoClient.GetDatabase(options.Value.DatabaseName);
-        //}
-
-        //public IFhirSyncRepository Create(string collectionName)
-        //{
-        //    return new FhirSyncRepository(_database, collectionName);
-        //}
+       
     }
 }

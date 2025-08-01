@@ -36,44 +36,7 @@ namespace Ship.Ses.Transmitter.Infrastructure.Installers
 
             return builder;
         }
-        //public static HostApplicationBuilder InstallAppDbContext(this HostApplicationBuilder builder)
-        //{
-        //    builder.ConfigureServices((hostContext, services) =>
-        //    {
-        //        var appSettings = hostContext.Configuration.GetSection(nameof(AppSettings)).Get<AppSettings>();
-
-        //        if (appSettings != null)
-        //        {
-        //            var msSqlSettings = appSettings.ShipServerSqlDb;
-
-        //            services.AddDbContext<AppDbContext>(options =>
-        //                options.UseMySql(msSqlSettings.ConnectionString, ServerVersion.AutoDetect(msSqlSettings.ConnectionString)));
-
-        //            services.AddScoped<IAppDbContext>(provider => provider.GetService<AppDbContext>());
-        //        }
-        //    });
-
-        //    return builder;
-        //}
-        //public static IHostBuilder InstallAppDbContext(this IHostBuilder builder)
-        //{
-        //    builder.ConfigureServices((hostContext, services) =>
-        //    {
-        //        var appSettings = hostContext.Configuration.GetSection(nameof(AppSettings)).Get<AppSettings>();
-
-        //        if (appSettings != null)
-        //        {
-        //            var msSqlSettings = appSettings.ShipServerSqlDb;
-
-        //            services.AddDbContext<AppDbContext>(options =>
-        //                options.UseMySQL(msSqlSettings.ConnectionString));
-
-        //            services.AddScoped<IAppDbContext>(provider => provider.GetService<AppDbContext>());
-        //        }
-        //    });
-
-        //    return builder;
-        //}
+        
     }
 
 
