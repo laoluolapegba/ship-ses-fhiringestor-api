@@ -52,5 +52,6 @@
     <Folder Include="BackgroundTasks\" />
     <Folder Include="Events\" />
     <Folder Include="Filters\" />
+    <Folder Include="Repositories\" />
   </ItemGroup>
 </Project>

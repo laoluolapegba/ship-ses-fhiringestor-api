@@ -7,6 +7,7 @@ using MongoDB.Driver;
 using Scalar.AspNetCore;
 using Ship.Ses.Transmitter.Application.Interfaces;
 using Ship.Ses.Transmitter.Application.Patients;
+using Ship.Ses.Transmitter.Application.Services;
 using Ship.Ses.Transmitter.Application.Shared;
 using Ship.Ses.Transmitter.Domain.Patients;
 using Ship.Ses.Transmitter.Infrastructure.Installers;
@@ -39,6 +40,9 @@ builder.Services.AddSingleton<IMongoClient>(s =>
 // Register IMongoSyncRepository as a Scoped service
 builder.Services.AddScoped<IMongoSyncRepository, MongoSyncRepository>();
 builder.Services.AddScoped<IHealthService, HealthService>();
+builder.Services.AddScoped<IStatusEventRepository, StatusEventRepository>();
+
+builder.Services.AddScoped<IStatusCallbackService, StatusCallbackService>();
 
 // Register Services & Observability
 builder.Services.ConfigureTracing(builder.Configuration);
