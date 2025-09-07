@@ -30,6 +30,7 @@ namespace Ship.Ses.Transmitter.Infrastructure.Persistance.Configuration.Domain
                 throw new ArgumentException("SourceDbSettings or DatabaseName is not configured for MongoSyncRepository.", nameof(settings));
             }
             _database = client.GetDatabase(settings.Value.DatabaseName);
+            _col = _database.GetCollection<StatusEvent>("patientstatusevents");
         }
         public async Task<(StatusEvent persisted, bool duplicate, bool conflict)>  UpsertPatientStatusAsync(StatusEvent incoming, CancellationToken ct)
         {

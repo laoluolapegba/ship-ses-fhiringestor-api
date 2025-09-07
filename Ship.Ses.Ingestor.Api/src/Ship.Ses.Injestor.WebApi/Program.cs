@@ -5,6 +5,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using MongoDB.Driver;
 using Scalar.AspNetCore;
+using Serilog;
 using Ship.Ses.Transmitter.Application.Interfaces;
 using Ship.Ses.Transmitter.Application.Patients;
 using Ship.Ses.Transmitter.Application.Services;
@@ -18,7 +19,26 @@ using Ship.Ses.Transmitter.Infrastructure.Persistance.MySql;
 using Ship.Ses.Transmitter.Infrastructure.Settings;
 using Ship.Ses.Transmitter.Infrastructure.Shared;
 using Ship.Ses.Transmitter.WebApi.Installers;
+using static Org.BouncyCastle.Math.EC.ECCurve;
+
+
+
+
+
 var builder = WebApplication.CreateBuilder(args);
+
+builder.Logging.ClearProviders();
+//  Configure Serilog with ElasticSearch & CorrelationId
+Log.Logger = new LoggerConfiguration()
+    .ReadFrom.Configuration(builder.Configuration)
+    .CreateLogger();
+builder.Logging.AddSerilog();
+
+
+builder.Configuration.AddJsonFile("appsettings.json", optional: false, reloadOnChange: true);
+builder.Configuration.AddEnvironmentVariables();
+
+
 // Add services to the container.
 builder.Services.AddOktaAuthentication(builder.Configuration);
 
@@ -61,6 +81,10 @@ else
 {
     throw new Exception("AppSettings not found");
 }
+
+
+builder.Services.Configure<KestrelServerOptions>(
+           builder.Configuration.GetSection("Kestrel"));
 
 builder.Services.AddScoped<IClientSyncConfigProvider, EfClientSyncConfigProvider>();
 

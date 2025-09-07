@@ -30,23 +30,31 @@ namespace Ship.Ses.Transmitter.Application.Services
         }
 
         public async Task<PatientTransmissionStatusResponse> ProcessStatusUpdateAsync(
-            Dictionary<string, string> requestHeaders,
-            PatientTransmissionStatusRequest request,
-            CancellationToken cancellationToken = default)
+    Dictionary<string, string> requestHeaders,
+    PatientTransmissionStatusRequest request,
+    CancellationToken cancellationToken = default)
         {
+            // These checks will be handled by the controller's log if a null body is sent.
             if (request is null) throw new ArgumentException("Request cannot be null.");
             if (string.IsNullOrWhiteSpace(request.TransactionId)) throw new ArgumentException("TransactionId is required.");
             if (request.Data is null) throw new ArgumentException("Data is required for this callback.");
+
+            _logger.LogInformation("Processing status update for transactionId: {TransactionId}", request.TransactionId);
 
             // Extract from Data
             var resourceType = request.Data["resourceType"]?.GetValue<string>() ?? "Patient";
             var resourceId = request.Data["id"]?.GetValue<string>(); // may be null
 
+            _logger.LogInformation("Extracted resource type '{ResourceType}' and resource ID '{ResourceId}' from data.", resourceType, resourceId);
+
             var dataCanonical = JsonSerializer.Serialize(
                 request.Data,
                 new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase, WriteIndented = false });
 
+            // This line can throw a NullReferenceException if dataCanonical is not valid JSON.
             var dataBson = MongoDB.Bson.Serialization.BsonSerializer.Deserialize<BsonDocument>(dataCanonical);
+
+            _logger.LogDebug("Successfully deserialized data to BSON document.");
 
             var payloadHash = ComputePayloadHash(
                 status: request.Status,
@@ -55,12 +63,14 @@ namespace Ship.Ses.Transmitter.Application.Services
                 txId: request.TransactionId,
                 dataCanonical: dataCanonical);
 
+            _logger.LogDebug("Computed payload hash: {PayloadHash}", payloadHash);
+
             // Idempotency & conflicts via repo (unique index on transactionId)
             var newEvent = new StatusEvent
             {
                 TransactionId = request.TransactionId,
                 ResourceType = resourceType,
-                ResourceId = resourceId, // nullable is fine
+                ResourceId = resourceId, 
                 ShipId = request.ShipId,
                 Status = request.Status,
                 Message = request.Message,
@@ -75,17 +85,16 @@ namespace Ship.Ses.Transmitter.Application.Services
 
             if (conflict)
             {
-                _logger.LogWarning("Conflicting payload for transactionId {TxId}", request.TransactionId);
+                _logger.LogError("Conflict detected for transactionId {TxId}. The incoming payload conflicts with an existing record.", request.TransactionId);
                 throw new InvalidOperationException("Conflicting payload for the same transactionId; existing record retained.");
             }
-
-            if (duplicate)
+            else if (duplicate)
             {
-                _logger.LogInformation("Duplicate callback for transactionId {TxId}", request.TransactionId);
+                _logger.LogInformation("Duplicate callback received for transactionId {TxId}. No new record was created.", request.TransactionId);
             }
             else
             {
-                _logger.LogInformation("Recorded status event for transactionId {TxId}", request.TransactionId);
+                _logger.LogInformation("Successfully recorded new status event for transactionId {TxId}.", request.TransactionId);
             }
 
             return new PatientTransmissionStatusResponse

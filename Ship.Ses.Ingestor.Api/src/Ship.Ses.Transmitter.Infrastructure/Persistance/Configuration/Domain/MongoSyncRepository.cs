@@ -7,6 +7,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
+using System.Threading;
 using System.Threading.Tasks;
 
 namespace Ship.Ses.Transmitter.Infrastructure.Persistance.Configuration.Domain
@@ -42,7 +43,7 @@ namespace Ship.Ses.Transmitter.Infrastructure.Persistance.Configuration.Domain
             var collectionName = new T().CollectionName;
             var collection = _database.GetCollection<T>(collectionName);
 
-            var filter = Builders<T>.Filter.Eq(r => r.Status, "Pending");
+            var filter = Builders<T>.Filter.Eq(r => r.Status, "Pending"); 
             return await collection.Find(filter).ToListAsync();
         }
 
@@ -93,5 +94,8 @@ namespace Ship.Ses.Transmitter.Infrastructure.Persistance.Configuration.Domain
         }
 
         
+
+
+
     }
 }

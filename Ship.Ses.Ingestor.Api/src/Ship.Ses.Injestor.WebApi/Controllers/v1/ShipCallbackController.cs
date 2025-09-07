@@ -13,10 +13,12 @@ namespace Ship.Ses.Ingestor.Api.Controllers.v1
     public class ShipCallbackController : ControllerBase
     {
         private readonly IStatusCallbackService _statusCallbackService;
+        private readonly ILogger<ShipCallbackController> _logger;
         //https://myfacility.health.ng/ship/fhir/ack
-        public ShipCallbackController(IStatusCallbackService statusCallbackService)
+        public ShipCallbackController(IStatusCallbackService statusCallbackService, ILogger<ShipCallbackController> logger)
         {
             _statusCallbackService = statusCallbackService;
+            _logger = logger;
         }
 
         [HttpPost("patient/ack")]
@@ -27,17 +29,26 @@ namespace Ship.Ses.Ingestor.Api.Controllers.v1
         [ProducesResponseType(typeof(string), StatusCodes.Status500InternalServerError)]
         public async Task<IActionResult> PatientTransmissionStatus([FromBody] PatientTransmissionStatusRequest request, CancellationToken ct)
         {
-            // Optional hard checks – enable if you want strict headers:
+            // Optional hard checks :
             // if (!Request.Headers.TryGetValue("x-correlation-id", out var corr)) return BadRequest("x-correlation-id header is required.");
             // if (!Request.Headers.TryGetValue("x-client-id", out var clientId)) return Unauthorized("x-client-id header is missing or invalid.");
+            _logger.LogInformation("PatientTransmissionStatus endpoint called.");
+
+            // **CRITICAL FIX: Check if the request body is null.**
+            if (request == null)
+            {
+                _logger.LogError("Received a request with a null body. Returning 400 Bad Request.");
+                return BadRequest("Request body cannot be empty.");
+            }
+
+            _logger.LogDebug("Processing request for patientId: {PatientId}", request.Message); // Log key data to trace
 
             try
             {
-                // Headers are now optional
+                // This line is where the exception would have occurred.
                 var requestHeaders = Request?.Headers?.ToDictionary(h => h.Key, h => h.Value.ToString())
-                                    ?? new Dictionary<string, string>();
+                                     ?? new Dictionary<string, string>();
 
-                // Correlation id is optional; generate if absent
                 var correlationId = Request.Headers.TryGetValue("x-correlation-id", out var corr)
                     ? corr.ToString()
                     : Guid.NewGuid().ToString();
@@ -48,18 +59,22 @@ namespace Ship.Ses.Ingestor.Api.Controllers.v1
                     ct);
 
                 response.CorrelationId = correlationId;
+                _logger.LogInformation("Successfully processed status update for correlationId: {CorrelationId}", correlationId);
                 return Ok(response);
             }
             catch (InvalidOperationException ex)
             {
+                _logger.LogWarning(ex, "Conflict error: {Message}", ex.Message);
                 return Conflict(ex.Message);
             }
             catch (ArgumentException ex)
             {
+                _logger.LogWarning(ex, "Bad request error: {Message}", ex.Message);
                 return BadRequest(ex.Message);
             }
             catch (Exception ex)
             {
+                _logger.LogError(ex, "An unexpected error occurred.");
                 return StatusCode(500, "An unexpected error occurred: " + ex.Message);
             }
         }
