@@ -106,6 +106,8 @@ namespace Ship.Ses.Transmitter.Application.Services
             };
         }
 
+        public Task<StatusEvent?> GetByTransactionIdAsync(string transactionId, CancellationToken ct = default) =>
+        _repository.GetByTransactionIdAsync(transactionId, ct);
         private static string ComputePayloadHash(string status, string message, string shipId, string txId, string dataCanonical)
         {
             static string Sha256(string s)
