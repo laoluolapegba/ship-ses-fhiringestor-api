@@ -1,17 +1,19 @@
-﻿using Ship.Ses.Transmitter.Application.Authentication.LoginUser;
+﻿using MassTransit.Mediator;
+using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Mvc;
+using Ship.Ses.Ingestor.Api.Helper;
+using Ship.Ses.Transmitter.Application.Authentication.LoginUser;
 using Ship.Ses.Transmitter.Application.Authentication.RefreshUserToken;
 using Ship.Ses.Transmitter.Application.Authentication.ReLoginCustomer;
-using MassTransit.Mediator;
-using Microsoft.AspNetCore.Mvc;
-using Swashbuckle.AspNetCore.Annotations;
+using Ship.Ses.Transmitter.Application.Interfaces;
 using Ship.Ses.Transmitter.Application.Patients;
 using Ship.Ses.Transmitter.Domain.Patients;
 using Ship.Ses.Transmitter.WebApi.Filters;
+using Swashbuckle.AspNetCore.Annotations;
 using System.Net;
-using Microsoft.AspNetCore.Authorization;
 using System.Security.Claims;
-using Ship.Ses.Transmitter.Application.Interfaces;
-using Ship.Ses.Ingestor.Api.Helper;
+using System.Text;
+using System.Text.Json;
 namespace Ship.Ses.Transmitter.WebApi.Controllers.v1
 {
 
@@ -27,23 +29,18 @@ namespace Ship.Ses.Transmitter.WebApi.Controllers.v1
     {
         private readonly IFhirIngestService _ingestService;
         private readonly ILogger<FhirIngestController> _logger;
-        private readonly IClientSyncConfigProvider _clientConfig;
+        //private readonly IClientSyncConfigProvider _clientConfig;
 
         public FhirIngestController(
             IFhirIngestService ingestService,
-            ILogger<FhirIngestController> logger,
-            IClientSyncConfigProvider clientConfig)
+            ILogger<FhirIngestController> logger)
+           // IClientSyncConfigProvider clientConfig)
         {
             _ingestService = ingestService;
             _logger = logger;
-            _clientConfig = clientConfig;
+            //_clientConfig = clientConfig;
         }
 
-        /// <summary>
-        /// Accepts a FHIR-compliant resource payload and stores it for processing.
-        /// </summary>
-        /// <param name="request">FHIR resource wrapper with metadata</param>
-        /// <returns>A success or error response</returns>
         [HttpPost]
         [SwaggerOperation(
             Summary = "Submit a FHIR resource",
@@ -51,55 +48,145 @@ namespace Ship.Ses.Transmitter.WebApi.Controllers.v1
             OperationId = "FhirIngest_SubmitResource",
             Tags = new[] { "FHIR Ingest" }
         )]
-        [ProducesResponseType(typeof(object), 200)]
-        [ProducesResponseType(typeof(string), 400)]
-        [ProducesResponseType(typeof(string), 500)]
+        [ProducesResponseType(typeof(object), StatusCodes.Status202Accepted)]
+        [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
+        [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status401Unauthorized)]
+        [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status500InternalServerError)]
         public async Task<IActionResult> Post([FromBody] FhirIngestRequest request)
         {
+            // Correlation id for tracing (optional but useful)
+            var correlationId = HttpContext.Request.Headers.TryGetValue("X-Correlation-Id", out var hdr) && !string.IsNullOrWhiteSpace(hdr)
+                ? hdr.ToString()
+                : HttpContext.TraceIdentifier;
+            HttpContext.Response.Headers["X-Correlation-Id"] = correlationId;
+
             if (request == null)
             {
-                _logger.LogWarning("❌ Request body is null.");
-                return BadRequest("Request cannot be null.");
+                _logger.LogWarning("❌ Null request body. corr={CorrelationId}", correlationId);
+                return Problem(title: "Bad request", detail: "Request body cannot be null.",
+                               statusCode: StatusCodes.Status400BadRequest);
             }
 
-            var clientIdClaim = User.FindFirst("client_id");
-            if (clientIdClaim == null || string.IsNullOrWhiteSpace(clientIdClaim.Value))
+            // client_id (or fallback azp) from token
+            var rawClientId = User.FindFirst("client_id")?.Value ?? User.FindFirst("azp")?.Value;
+            if (string.IsNullOrWhiteSpace(rawClientId))
             {
-                _logger.LogWarning("❌ Missing 'client_id' claim in token.");
-                return Unauthorized(new { message = "Missing or invalid authentication context." });
+                _logger.LogWarning("❌ Missing client claim. corr={CorrelationId}", correlationId);
+                return Problem(title: "Unauthorized", detail: "Missing 'client_id' or 'azp' claim.",
+                               statusCode: StatusCodes.Status401Unauthorized);
             }
 
-            var clientId = SafeMessageHelper.Sanitize(clientIdClaim.Value);
-
-            if (!await _clientConfig.IsClientActiveAsync(clientId))
+            // resource type
+            var resourceType = request.ResourceType?.Trim();
+            if (string.IsNullOrWhiteSpace(resourceType))
             {
-                _logger.LogWarning("❌ Unknown or inactive client attempted ingestion: {ClientId}", clientId);
-                return Unauthorized(new { message = $"Client '{clientId}' is not registered or not active" });
+                _logger.LogWarning("❌ Missing ResourceType. corr={CorrelationId}", correlationId);
+                return Problem(title: "Bad request", detail: "Missing required field: ResourceType.",
+                               statusCode: StatusCodes.Status400BadRequest);
             }
 
-            if (string.IsNullOrWhiteSpace(request.ResourceType))
+            // Try to get a resourceId for better diagnostics
+            var resourceId = TryGetResourceId(request);
+
+            // One scope so all logs in this request include these fields
+            using var _ = _logger.BeginScope(new Dictionary<string, object?>
             {
-                _logger.LogWarning("❌ Missing required field: ResourceType");
-                return BadRequest("Missing required field: ResourceType.");
-            }
+                ["CorrelationId"] = correlationId,
+                ["ClientId"] = SafeMessageHelper.Sanitize(rawClientId),
+                ["ResourceType"] = SafeMessageHelper.Sanitize(resourceType),
+                ["ResourceId"] = SafeMessageHelper.Sanitize(resourceId ?? "(none)")
+            });
+
+            // 👉 This is the line you want to reliably see:
+            _logger.LogInformation("📥 Received {ResourceType} {ResourceId} from client {ClientId}.", resourceType, resourceId ?? "(none)", rawClientId);
+
+            // Optional: quick idea of payload size (without logging the body)
+            var approxSize = TryGetPayloadSizeBytes(request);
+            if (approxSize is not null)
+                _logger.LogDebug("Payload size ≈ {Bytes} bytes.", approxSize);
 
             try
             {
-                _logger.LogInformation("📥 Ingesting FHIR resource of type {ResourceType} from EMR source.", SafeMessageHelper.Sanitize(request.ResourceType));
-                await _ingestService.IngestAsync(request, clientId);
+                await _ingestService.IngestAsync(request, rawClientId);
 
+                _logger.LogInformation("✅ Accepted {ResourceType} {ResourceId} for client {ClientId}.", resourceType, resourceId ?? "(none)", rawClientId);
                 return Accepted(new
                 {
                     status = "accepted",
-                    resourceType = request.ResourceType,
+                    resourceType,
+                    resourceId,
+                    correlationId,
                     timestamp = DateTime.UtcNow
                 });
             }
+            catch (JsonException jx)
+            {
+                _logger.LogWarning(jx, "Invalid JSON payload for {ResourceType} {ResourceId}.", resourceType, resourceId ?? "(none)");
+                return Problem(title: "Bad request", detail: "Invalid JSON payload.",
+                               statusCode: StatusCodes.Status400BadRequest,
+                               extensions: new Dictionary<string, object?> { ["correlationId"] = correlationId });
+            }
             catch (Exception ex)
             {
-                _logger.LogError(SafeMessageHelper.Sanitize(ex), "🔥 Unexpected error during FHIR ingest.");
-                return StatusCode(500, new { error = "Unexpected error occurred while processing the request." });
+                _logger.LogError(ex, "🔥 Unexpected error ingesting {ResourceType} {ResourceId}.", resourceType, resourceId ?? "(none)");
+                return Problem(title: "Internal server error", detail: "Unexpected error occurred while processing the request.",
+                               statusCode: StatusCodes.Status500InternalServerError,
+                               extensions: new Dictionary<string, object?> { ["correlationId"] = correlationId });
             }
+        }
+
+        private static string? TryGetResourceId(FhirIngestRequest req)
+        {
+            // 1) If the request type already has a ResourceId property, use it
+            var prop = req.GetType().GetProperty("ResourceId");
+            if (prop?.GetValue(req) is string rid && !string.IsNullOrWhiteSpace(rid))
+                return rid;
+
+            // 2) Try to parse known JSON fields that might hold the FHIR resource (string-typed)
+            foreach (var name in new[] { "FhirJson", "Payload", "Bundle", "FhirBundle" })
+            {
+                var p = req.GetType().GetProperty(name);
+                if (p?.GetValue(req) is string json && !string.IsNullOrWhiteSpace(json))
+                {
+                    try
+                    {
+                        using var doc = JsonDocument.Parse(json);
+                        var root = doc.RootElement;
+
+                        // If it's a Bundle, look for first entry.resource.id
+                        if (root.TryGetProperty("resourceType", out var rt) && rt.ValueKind == JsonValueKind.String &&
+                            string.Equals(rt.GetString(), "Bundle", StringComparison.OrdinalIgnoreCase))
+                        {
+                            if (root.TryGetProperty("entry", out var entry) && entry.ValueKind == JsonValueKind.Array && entry.GetArrayLength() > 0)
+                            {
+                                var first = entry[0];
+                                if (first.TryGetProperty("resource", out var res) &&
+                                    res.ValueKind == JsonValueKind.Object &&
+                                    res.TryGetProperty("id", out var idEl) &&
+                                    idEl.ValueKind == JsonValueKind.String)
+                                    return idEl.GetString();
+                            }
+                        }
+
+                        // Otherwise look for top-level id
+                        if (root.TryGetProperty("id", out var id) && id.ValueKind == JsonValueKind.String)
+                            return id.GetString();
+                    }
+                    catch { /* best effort; ignore */ }
+                }
+            }
+
+            return null;
+        }
+
+        private static int? TryGetPayloadSizeBytes(FhirIngestRequest req)
+        {
+            foreach (var name in new[] { "FhirJson", "Payload", "Bundle", "FhirBundle" })
+            {
+                var p = req.GetType().GetProperty(name);
+                if (p?.GetValue(req) is string s) return Encoding.UTF8.GetByteCount(s);
+            }
+            return null;
         }
     }
 }

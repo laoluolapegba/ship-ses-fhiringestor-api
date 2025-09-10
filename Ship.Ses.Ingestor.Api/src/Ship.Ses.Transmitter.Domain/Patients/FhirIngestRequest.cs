@@ -37,7 +37,8 @@ namespace Ship.Ses.Transmitter.Domain.Patients
         [SwaggerSchema("The client id / SHIP faciltiy ID of the source EMR.")]
         public string FacilityId { get; set; }
 
-        public string ClientEMRCallbackUrl { get; set; }
+        [SwaggerSchema("The callback URL of the source EMR to notify upon completion.")]
+        public string CallbackUrl { get; set; }
 
 
     }

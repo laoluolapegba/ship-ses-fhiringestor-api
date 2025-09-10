@@ -12,6 +12,8 @@ namespace Ship.Ses.Transmitter.WebApi.Installers
     {
         public static void InstallSwagger(this WebApplicationBuilder builder)
         {
+            
+            builder.Services.AddEndpointsApiExplorer();
             builder.Services.AddControllers();
             //builder.Services.AddSwaggerExamplesFromAssemblyOf<Program>();
             //Configure Swagger/OpenAPI

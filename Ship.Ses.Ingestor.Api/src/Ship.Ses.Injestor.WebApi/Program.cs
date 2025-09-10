@@ -1,8 +1,10 @@
 ﻿using Asp.Versioning;
 using Asp.Versioning.ApiExplorer;
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Server.Kestrel.Core;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
+using Microsoft.IdentityModel.Tokens;
 using MongoDB.Driver;
 using Scalar.AspNetCore;
 using Serilog;
@@ -19,6 +21,7 @@ using Ship.Ses.Transmitter.Infrastructure.Persistance.MySql;
 using Ship.Ses.Transmitter.Infrastructure.Settings;
 using Ship.Ses.Transmitter.Infrastructure.Shared;
 using Ship.Ses.Transmitter.WebApi.Installers;
+using System.Text.Json;
 using static Org.BouncyCastle.Math.EC.ECCurve;
 
 
@@ -38,9 +41,19 @@ builder.Logging.AddSerilog();
 builder.Configuration.AddJsonFile("appsettings.json", optional: false, reloadOnChange: true);
 builder.Configuration.AddEnvironmentVariables();
 
+builder.WebHost.ConfigureKestrel(o =>
+{
+    o.AddServerHeader = false; // don’t advertise Kestrel
+    o.ConfigureHttpsDefaults(h =>
+    {
+        h.SslProtocols = System.Security.Authentication.SslProtocols.Tls12
+                       | System.Security.Authentication.SslProtocols.Tls13;
+        // h.OnAuthenticate = ctx => { /* optional */ };
+    });
+});
 
 // Add services to the container.
-builder.Services.AddOktaAuthentication(builder.Configuration);
+builder.Services.AddIDPAuthentication(builder.Configuration);
 
 // Configure SourceDbSettings from appsettings.json
 builder.Services.Configure<SourceDbSettings>(builder.Configuration.GetSection("SourceDbSettings"));
@@ -65,28 +78,16 @@ builder.Services.AddScoped<IStatusEventRepository, StatusEventRepository>();
 builder.Services.AddScoped<IStatusCallbackService, StatusCallbackService>();
 
 // Register Services & Observability
-builder.Services.ConfigureTracing(builder.Configuration);
+//builder.Services.ConfigureTracing(builder.Configuration);
 
 var appSettings = builder.Configuration.GetSection(nameof(AppSettings)).Get<AppSettings>();
-if (appSettings != null)
-{
 
-    var msSqlSettings = appSettings.ShipServerSqlDb;
-    builder.Services.AddDbContext<ShipServerDbContext>(options =>
-    {
-        options.UseMySQL(msSqlSettings.ConnectionString);
-    });
-}
-else
-{
-    throw new Exception("AppSettings not found");
-}
 
 
 builder.Services.Configure<KestrelServerOptions>(
            builder.Configuration.GetSection("Kestrel"));
 
-builder.Services.AddScoped<IClientSyncConfigProvider, EfClientSyncConfigProvider>();
+//builder.Services.AddScoped<IClientSyncConfigProvider, EfClientSyncConfigProvider>();
 
 // Register IFhirIngestService 
 builder.Services.AddScoped<IFhirIngestService, FhirIngestService>();
@@ -128,8 +129,10 @@ builder.InstallSwagger();
 builder.InstallApplicationSettings();
 
 builder.InstallDependencyInjectionRegistrations();
-builder.Services.AddOpenApi();
-builder.InstallCors();
+builder.Services.AddConfiguredRateLimiting(builder.Configuration);
+//builder.InstallCors();
+
+
 
 var app = builder.Build();
 app.UseSwagger();
@@ -150,7 +153,7 @@ app.UseSwaggerUI(options =>
 if (app.Environment.IsDevelopment())
 {
     app.UseHttpsRedirection();
-    app.MapOpenApi();
+    //app.MapOpenApi();
     app.MapScalarApiReference();
 }
 
@@ -160,6 +163,38 @@ app.UseAuthentication();
 app.UseAuthorization();
 
 app.MapControllers();
+app.UseConfiguredRateLimiting();
+var env = app.Environment;
+
+if (env.IsDevelopment())
+{
+    app.UseDeveloperExceptionPage();
+}
+else
+{
+    app.UseExceptionHandler(errorApp =>
+    {
+        errorApp.Run(async context =>
+        {
+            var feature = context.Features.Get<Microsoft.AspNetCore.Diagnostics.IExceptionHandlerFeature>();
+            var ex = feature?.Error;
+
+            var problem = CreateProblem(context, ex); // helper below
+
+            context.Response.ContentType = "application/problem+json";
+            context.Response.StatusCode = problem.Status ?? StatusCodes.Status500InternalServerError;
+
+            var logger = context.RequestServices.GetRequiredService<ILoggerFactory>()
+                                               .CreateLogger("GlobalException");
+            // Log full details server-side
+            logger.LogError(ex, "Unhandled exception. traceId={TraceId}", problem.Extensions["traceId"]);
+
+            await context.Response.WriteAsJsonAsync(problem);
+        });
+    });
+
+    app.UseHsts();
+}
 var server = app.Services.GetRequiredService<Microsoft.AspNetCore.Hosting.Server.IServer>();
 var addresses = server.Features.Get<Microsoft.AspNetCore.Hosting.Server.Features.IServerAddressesFeature>();
 
@@ -179,3 +214,59 @@ app.Logger.LogInformation("SHIP SeS Ingestor API started and ready to accept req
 
 
 app.Run();
+
+static ProblemDetails CreateProblem(HttpContext ctx, Exception? ex)
+{
+    var traceId = ctx.TraceIdentifier;
+
+    int status;
+    string title;
+    string detail;
+
+    switch (ex)
+    {
+        case SecurityTokenException ste:
+            status = StatusCodes.Status401Unauthorized;
+            title = "Invalid security token";
+            detail = ste.Message;
+            break;
+
+        case UnauthorizedAccessException uae:
+            status = StatusCodes.Status403Forbidden;
+            title = "Forbidden";
+            detail = uae.Message;
+            break;
+
+        case Exception e when e is ArgumentException || e is JsonException:
+            status = StatusCodes.Status400BadRequest;
+            title = "Bad request";
+            detail = e.Message;
+            break;
+
+        case InvalidOperationException ioe when ioe.Message.StartsWith("Unable to resolve service", StringComparison.Ordinal):
+            status = StatusCodes.Status500InternalServerError;
+            title = "Dependency resolution error";
+            detail = "A required service was not registered. Contact the API administrator.";
+            break;
+
+        default:
+            status = StatusCodes.Status500InternalServerError;
+            title = "Internal server error";
+            detail = "An unexpected error occurred.";
+            break;
+    }
+
+    var problem = new ProblemDetails
+    {
+        Type = "about:blank",
+        Title = title,
+        Status = status,
+        Detail = detail,
+        Instance = ctx.Request.Path
+    };
+
+    // add a correlation id so you can find the server log entry
+    problem.Extensions["traceId"] = traceId;
+
+    return problem;
+}

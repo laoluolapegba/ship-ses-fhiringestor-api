@@ -116,24 +116,24 @@ namespace Ship.Ses.Transmitter.Infrastructure.Installers
 
             builder.Logging.AddSerilog();
         }
-        public static void ConfigureTracing(this IServiceCollection services, IConfiguration configuration)
-        {
-            services.AddOpenTelemetry()
-                .WithTracing(tracing =>
-                {
-                    tracing
-                        .SetResourceBuilder(ResourceBuilder.CreateDefault().AddService("FHIRSyncService"))
-                        .AddAspNetCoreInstrumentation()
-                        .AddHttpClientInstrumentation()
-                        //.AddMongoDBInstrumentation()
-                        .AddOtlpExporter(options =>
-                        {
-                            options.Endpoint = new Uri(configuration["OpenTelemetry:OtlpEndpoint"] ?? "http://localhost:4317");
-                        });
-                });
+        //public static void ConfigureTracing(this IServiceCollection services, IConfiguration configuration)
+        //{
+        //    services.AddOpenTelemetry()
+        //        .WithTracing(tracing =>
+        //        {
+        //            tracing
+        //                .SetResourceBuilder(ResourceBuilder.CreateDefault().AddService("FHIRSyncService"))
+        //                .AddAspNetCoreInstrumentation()
+        //                .AddHttpClientInstrumentation()
+        //                //.AddMongoDBInstrumentation()
+        //                .AddOtlpExporter(options =>
+        //                {
+        //                    options.Endpoint = new Uri(configuration["OpenTelemetry:OtlpEndpoint"] ?? "http://localhost:4317");
+        //                });
+        //        });
 
-            services.AddSingleton(Propagator);
-        }
+        //    services.AddSingleton(Propagator);
+        //}
         public static IServiceCollection AddFhirApiClient(this IServiceCollection services, IConfiguration config)
         {
             services.Configure<FhirApiSettings>(config.GetSection("FhirApi"));

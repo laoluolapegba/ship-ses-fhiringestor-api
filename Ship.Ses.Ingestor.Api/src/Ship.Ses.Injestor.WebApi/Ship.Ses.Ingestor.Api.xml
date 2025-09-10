@@ -9,13 +9,6 @@
             Allows EMRs to submit FHIR-compliant resources into the SHIP SES platform.
             </summary>
         </member>
-        <member name="M:Ship.Ses.Transmitter.WebApi.Controllers.v1.FhirIngestController.Post(Ship.Ses.Transmitter.Domain.Patients.FhirIngestRequest)">
-            <summary>
-            Accepts a FHIR-compliant resource payload and stores it for processing.
-            </summary>
-            <param name="request">FHIR resource wrapper with metadata</param>
-            <returns>A success or error response</returns>
-        </member>
         <member name="M:Ship.Ses.Ingestor.Api.Helper.SafeMessageHelper.Sanitize(System.String)">
             <summary>
             Sanitizes a string for safe use in logs or user-facing messages by removing control characters like CR, LF, and tabs.

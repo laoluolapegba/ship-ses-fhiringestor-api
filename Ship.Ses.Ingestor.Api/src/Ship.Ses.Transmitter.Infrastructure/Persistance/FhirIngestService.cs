@@ -23,12 +23,12 @@ namespace Ship.Ses.Transmitter.Infrastructure.Persistance
         private readonly IClientSyncConfigProvider _clientConfig;
         private const string ExtractSourceApi = "API";
         public FhirIngestService(IMongoSyncRepository mongoSyncRepository, IOptions<SourceDbSettings> options, 
-            ILogger<FhirIngestService> logger,
-            IClientSyncConfigProvider clientConfig)
+            ILogger<FhirIngestService> logger
+            ) //IClientSyncConfigProvider clientConfig
         {
             _mongoSyncRepository = mongoSyncRepository;
             _logger = logger;
-            _clientConfig = clientConfig ;
+            //_clientConfig = clientConfig ;
         }
 
         public async Task IngestAsync(FhirIngestRequest request, string clientId)
@@ -53,7 +53,7 @@ namespace Ship.Ses.Transmitter.Infrastructure.Persistance
                 LastAttemptAt = null,
                 SyncedResourceId = null, // Initially null, will be updated after sync
                 FacilityId = request.FacilityId,
-                ClientEMRCallbackUrl = request.ClientEMRCallbackUrl,
+                ClientEMRCallbackUrl = request.CallbackUrl,
 
             };
 

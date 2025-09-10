@@ -13,7 +13,7 @@ namespace Ship.Ses.Transmitter.Infrastructure.Installers
         {
             var cors = builder.Configuration.GetSection(nameof(AppSettings)).Get<AppSettings>()!.Cors;
 
-            builder.Services.AddCors(options =>
+            builder.Services.AddCors(options => 
             {
                 options.AddPolicy(DefaultCorsPolicyName,
                     corsBuilder =>
