@@ -20,14 +20,13 @@ namespace Ship.Ses.Transmitter.Application.DTOs
         [Required, StringLength(2000, MinimumLength = 1)]
         public string Message { get; set; } = default!;
 
-        [Required]
-        [RegularExpression(@"^SHIP[0-9]{10,}$")]
+        //[RegularExpression(@"^SHIP[0-9]{10,}$")]
         public string ShipId { get; set; } = default!;
 
         [Required, MinLength(1)]
         public string TransactionId { get; set; } = default!;
 
-        [Required]
+        //[Required]
         public System.Text.Json.Nodes.JsonObject Data { get; set; } = default!;
 
         // Optional client-sent time (server falls back to UtcNow)
