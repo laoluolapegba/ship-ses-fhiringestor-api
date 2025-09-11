@@ -84,8 +84,8 @@ var appSettings = builder.Configuration.GetSection(nameof(AppSettings)).Get<AppS
 
 
 
-builder.Services.Configure<KestrelServerOptions>(
-           builder.Configuration.GetSection("Kestrel"));
+//builder.Services.Configure<KestrelServerOptions>(
+ //          builder.Configuration.GetSection("Kestrel"));
 
 //builder.Services.AddScoped<IClientSyncConfigProvider, EfClientSyncConfigProvider>();
 
