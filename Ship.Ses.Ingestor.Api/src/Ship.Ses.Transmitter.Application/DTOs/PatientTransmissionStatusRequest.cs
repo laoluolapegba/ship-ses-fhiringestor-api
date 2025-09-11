@@ -27,7 +27,7 @@ namespace Ship.Ses.Transmitter.Application.DTOs
         public string TransactionId { get; set; } = default!;
 
         //[Required]
-        public System.Text.Json.Nodes.JsonObject Data { get; set; } = default!;
+        //public System.Text.Json.Nodes.JsonObject Data { get; set; };
 
         // Optional client-sent time (server falls back to UtcNow)
         public DateTimeOffset? Timestamp { get; set; }

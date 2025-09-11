@@ -33,9 +33,11 @@ namespace Ship.Ses.Ingestor.Api.Controllers.v1
             // Optional hard checks :
             // if (!Request.Headers.TryGetValue("x-correlation-id", out var corr)) return BadRequest("x-correlation-id header is required.");
             // if (!Request.Headers.TryGetValue("x-client-id", out var clientId)) return Unauthorized("x-client-id header is missing or invalid.");
-            _logger.LogInformation("PatientTransmissionStatus endpoint called.");
+            _logger.LogInformation(
+    "PatientTransmissionStatus endpoint called with payload: {requestJson}",
+    System.Text.Json.JsonSerializer.Serialize(request)
+);
 
-            // **CRITICAL FIX: Check if the request body is null.**
             if (request == null)
             {
                 _logger.LogError("Received a request with a null body. Returning 400 Bad Request.");
@@ -46,7 +48,6 @@ namespace Ship.Ses.Ingestor.Api.Controllers.v1
 
             try
             {
-                // This line is where the exception would have occurred.
                 var requestHeaders = Request?.Headers?.ToDictionary(h => h.Key, h => h.Value.ToString())
                                      ?? new Dictionary<string, string>();
 
@@ -101,8 +102,6 @@ namespace Ship.Ses.Ingestor.Api.Controllers.v1
             try
             {
                 var evt = await _statusCallbackService.GetByTransactionIdAsync(transactionId, ct);
-                // If your service doesn’t expose this, inject IStatusEventRepository and call it directly:
-                // var evt = await _repository.GetByTransactionIdAsync(transactionId, ct);
 
                 if (evt is null)
                     return NotFound();
@@ -141,8 +140,6 @@ namespace Ship.Ses.Ingestor.Api.Controllers.v1
             }
             catch (Exception ex)
             {
-                // Optional: log with correlationId in scope if you use Serilog’s LogContext
-                // using (LogContext.PushProperty("CorrelationId", correlationId)) { _logger.LogError(ex, ...); }
                 return StatusCode(500, $"An unexpected error occurred: {ex.Message}");
             }
         }

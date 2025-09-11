@@ -34,43 +34,43 @@ namespace Ship.Ses.Transmitter.Application.Services
     PatientTransmissionStatusRequest request,
     CancellationToken cancellationToken = default)
         {
-            // These checks will be handled by the controller's log if a null body is sent.
             if (request is null) throw new ArgumentException("Request cannot be null.");
             if (string.IsNullOrWhiteSpace(request.TransactionId)) throw new ArgumentException("TransactionId is required.");
-            if (request.Data is null) throw new ArgumentException("Data is required for this callback.");
 
             _logger.LogInformation("Processing status update for transactionId: {TransactionId}", request.TransactionId);
 
-            // Extract from Data
-            var resourceType = request.Data["resourceType"]?.GetValue<string>() ?? "Patient";
-            var resourceId = request.Data["id"]?.GetValue<string>(); // may be null
+            // Optional hints via headers (caller can pass these if they want)
+            const string HeaderResourceType = "x-fhir-resource-type";
+            const string HeaderResourceId = "x-fhir-resource-id";
 
-            _logger.LogInformation("Extracted resource type '{ResourceType}' and resource ID '{ResourceId}' from data.", resourceType, resourceId);
+            var resourceType = TryGetHeader(requestHeaders, HeaderResourceType) ?? "Patient";
+            var resourceId = TryGetHeader(requestHeaders, HeaderResourceId);
 
-            var dataCanonical = JsonSerializer.Serialize(
-                request.Data,
-                new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase, WriteIndented = false });
+            if (resourceId is null)
+                _logger.LogDebug("No resource ID supplied in headers for transactionId {TxId}.", request.TransactionId);
 
-            // This line can throw a NullReferenceException if dataCanonical is not valid JSON.
-            var dataBson = MongoDB.Bson.Serialization.BsonSerializer.Deserialize<BsonDocument>(dataCanonical);
+            _logger.LogInformation(
+                "Using resourceType '{ResourceType}' and resourceId '{ResourceId}' for transactionId {TxId}.",
+                resourceType, resourceId, request.TransactionId
+            );
 
-            _logger.LogDebug("Successfully deserialized data to BSON document.");
-
+            // No request.Data anymore. We compute a hash over the stable fields.
+            string? dataCanonical = null; // intentionally null since no payload body beyond the DTO
             var payloadHash = ComputePayloadHash(
                 status: request.Status,
                 message: request.Message,
                 shipId: request.ShipId,
                 txId: request.TransactionId,
-                dataCanonical: dataCanonical);
+                dataCanonical: dataCanonical // null → dataSha256 omitted in canonical
+            );
 
             _logger.LogDebug("Computed payload hash: {PayloadHash}", payloadHash);
 
-            // Idempotency & conflicts via repo (unique index on transactionId)
             var newEvent = new StatusEvent
             {
                 TransactionId = request.TransactionId,
                 ResourceType = resourceType,
-                ResourceId = resourceId, 
+                ResourceId = resourceId,
                 ShipId = request.ShipId,
                 Status = request.Status,
                 Message = request.Message,
@@ -78,7 +78,7 @@ namespace Ship.Ses.Transmitter.Application.Services
                 Source = "SHIP",
                 Headers = (requestHeaders?.Count ?? 0) > 0 ? JsonSerializer.Serialize(requestHeaders) : null,
                 PayloadHash = payloadHash,
-                Data = dataBson
+                Data = null // <-- important: no BSON payload now that Data is removed
             };
 
             var (persisted, duplicate, conflict) = await _repository.UpsertPatientStatusAsync(newEvent, cancellationToken);
@@ -127,6 +127,19 @@ namespace Ship.Ses.Transmitter.Application.Services
             });
 
             return Sha256(canonical);
+        }
+
+        private static string? TryGetHeader(IDictionary<string, string>? headers, string key)
+        {
+            if (headers is null || headers.Count == 0) return null;
+
+            // Case-insensitive lookup
+            foreach (var kvp in headers)
+            {
+                if (string.Equals(kvp.Key, key, StringComparison.OrdinalIgnoreCase))
+                    return string.IsNullOrWhiteSpace(kvp.Value) ? null : kvp.Value;
+            }
+            return null;
         }
     }
 
