@@ -49,11 +49,12 @@ namespace Ship.Ses.Transmitter.Infrastructure.Persistance
                 RetryCount = 0,
                 ExtractSource = ExtractSourceApi,
                 TransactionId = null,
-                ApiResponsePayload = null, // Initially null, will be updated after sync
+                ApiResponsePayload = null, 
                 LastAttemptAt = null,
-                SyncedResourceId = null, // Initially null, will be updated after sync
+                SyncedResourceId = null,
                 FacilityId = request.FacilityId,
                 ClientEMRCallbackUrl = request.CallbackUrl,
+                CorrelationId = request.CorrelationId
 
             };
 

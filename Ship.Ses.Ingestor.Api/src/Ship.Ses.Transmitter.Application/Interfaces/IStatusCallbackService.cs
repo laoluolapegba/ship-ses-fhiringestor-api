@@ -15,6 +15,7 @@ namespace Ship.Ses.Transmitter.Application.Interfaces
             PatientTransmissionStatusRequest request,
             CancellationToken cancellationToken = default);
         Task<StatusEvent?> GetByTransactionIdAsync(string transactionId, CancellationToken ct = default);
-    
+        Task<StatusEvent?> GetByCorrelationIdAsync(string correlationId, CancellationToken ct = default);
+
     }
 }

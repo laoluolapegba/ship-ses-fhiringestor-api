@@ -84,8 +84,8 @@ var appSettings = builder.Configuration.GetSection(nameof(AppSettings)).Get<AppS
 
 
 
-//builder.Services.Configure<KestrelServerOptions>(
- //          builder.Configuration.GetSection("Kestrel"));
+builder.Services.Configure<KestrelServerOptions>(
+          builder.Configuration.GetSection("Kestrel"));
 
 //builder.Services.AddScoped<IClientSyncConfigProvider, EfClientSyncConfigProvider>();
 
@@ -141,12 +141,12 @@ app.UseSwagger();
 // specifying the Swagger JSON endpoint.
 app.UseSwaggerUI(options =>
 {
-    // Build a swagger endpoint for each discovered API version
-    foreach (var description in app.Services.GetRequiredService<IApiVersionDescriptionProvider>().ApiVersionDescriptions)
-    {
-        options.SwaggerEndpoint($"/swagger/{description.GroupName}/swagger.json", $"FHIR Ingest API {description.GroupName.ToUpperInvariant()}");
-    }
-    options.RoutePrefix = "swagger"; 
+    var provider = app.Services.GetRequiredService<IApiVersionDescriptionProvider>();
+    foreach (var d in provider.ApiVersionDescriptions)
+        options.SwaggerEndpoint($"/swagger/{d.GroupName}/swagger.json", $"FHIR Ingest API {d.GroupName.ToUpperInvariant()}");
+
+    options.RoutePrefix = "docs"; // ← UI now at /docs
+    options.DocumentTitle = "SHIP SES Ingestor – API Docs";
 });
 
 // Configure the HTTP request pipeline.

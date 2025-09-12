@@ -43,7 +43,8 @@ namespace Ship.Ses.Transmitter.Domain.SyncModels
 
         [BsonElement("data")]
         public MongoDB.Bson.BsonDocument Data { get; set; } = default!; // full Patient JSON
-
+        [BsonElement("correlationId")]
+        public string CorrelationId { get; set; }
         public override string CollectionName => "patientstatusevents";
     }
 

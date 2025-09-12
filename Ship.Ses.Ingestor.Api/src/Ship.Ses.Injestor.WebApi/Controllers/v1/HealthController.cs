@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Mvc;
 using Ship.Ses.Transmitter.Application.DTOs;
 using Ship.Ses.Transmitter.Application.Shared;
 using Ship.Ses.Transmitter.Domain;
+using Swashbuckle.AspNetCore.Annotations;
 using System.Diagnostics;
 using System.Reflection;
 
@@ -11,6 +12,7 @@ namespace Ship.Ses.Transmitter.WebApi.Controllers.v1
     [ApiController]
     [Route("/health")] 
     [ApiVersionNeutral] 
+    //[SwaggerTag("Endpoint to check the health status of the SHIP SES Ingestor API.")]
     public class HealthController : ControllerBase
     {
         // inject services here that perform actual health checks
@@ -32,6 +34,11 @@ namespace Ship.Ses.Transmitter.WebApi.Controllers.v1
         }
 
         [HttpGet]
+        [SwaggerOperation(
+            Summary = "Get API health status",
+            Description = "Checks the overall health of the API and its dependencies.",
+            OperationId = "GetHealthStatus",
+            Tags = new[] { "Health" })]
         [ProducesResponseType(typeof(ApiHealthStatusDto), StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status503ServiceUnavailable)]
         public async Task<IActionResult> Get()

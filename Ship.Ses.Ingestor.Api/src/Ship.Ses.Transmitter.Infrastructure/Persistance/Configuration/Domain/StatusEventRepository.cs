@@ -74,6 +74,9 @@ namespace Ship.Ses.Transmitter.Infrastructure.Persistance.Configuration.Domain
         public Task<StatusEvent?> GetByTransactionIdAsync(string txId, CancellationToken ct) =>
             _col.Find(x => x.TransactionId == txId).FirstOrDefaultAsync(ct);
 
+        public Task<StatusEvent?> GetByCorrelationIdAsync(string corId, CancellationToken ct) =>
+            _col.Find(x => x.CorrelationId == corId).FirstOrDefaultAsync(ct);
+
         public async Task<T?> GetBySyncedResourceIdAsync<T>(string txId)
     where T : FhirSyncRecord, new()
         {

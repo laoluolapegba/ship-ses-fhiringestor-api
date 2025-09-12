@@ -1,6 +1,7 @@
 ﻿using Microsoft.AspNetCore.Builder;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
+using Ship.Ses.Ingestor.Api.Models;
 using Swashbuckle.AspNetCore.Filters;
 using Swashbuckle.AspNetCore.SwaggerGen;
 using System.IO;
@@ -12,25 +13,30 @@ namespace Ship.Ses.Transmitter.WebApi.Installers
     {
         public static void InstallSwagger(this WebApplicationBuilder builder)
         {
-            
             builder.Services.AddEndpointsApiExplorer();
             builder.Services.AddControllers();
-            //builder.Services.AddSwaggerExamplesFromAssemblyOf<Program>();
-            //Configure Swagger/OpenAPI
-            builder.Services.AddTransient<IConfigureOptions<SwaggerGenOptions>, ConfigureSwaggerOptions>(); 
+
+            // Register example providers (scan the assembly that contains the example type)
+            builder.Services.AddSwaggerExamplesFromAssemblyOf<FhirIngestAcceptedResponseExample>();
+
+            // If you already have custom swagger options elsewhere, keep this
+            builder.Services.AddTransient<IConfigureOptions<SwaggerGenOptions>, ConfigureSwaggerOptions>();
 
             builder.Services.AddSwaggerGen(options =>
             {
                 options.EnableAnnotations();
-                //options.ExampleFilters();
-                //Set the comments path for the Swagger JSON and UI.
+
+                // Enable examples support
+                options.ExampleFilters();
+
+                // XML comments (optional but nice)
                 var xmlFilename = $"{Assembly.GetExecutingAssembly().GetName().Name}.xml";
                 var xmlPath = Path.Combine(AppContext.BaseDirectory, xmlFilename);
-                options.IncludeXmlComments(xmlPath);
+                if (File.Exists(xmlPath))
+                    options.IncludeXmlComments(xmlPath);
 
-                // Add Swagger security definition and requirement here
-                options.AddSwaggerSecurityDefinition(); 
-
+                // Your existing security setup
+                options.AddSwaggerSecurityDefinition();
             });
         }
     }

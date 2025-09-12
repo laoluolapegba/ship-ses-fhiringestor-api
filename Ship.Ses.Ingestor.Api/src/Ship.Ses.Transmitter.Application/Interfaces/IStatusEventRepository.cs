@@ -15,6 +15,7 @@ namespace Ship.Ses.Transmitter.Application.Interfaces
         Task<(StatusEvent persisted, bool duplicate, bool conflict)>
         UpsertPatientStatusAsync(StatusEvent incoming, CancellationToken ct);
         Task<StatusEvent?> GetByTransactionIdAsync(string transactionId, CancellationToken ct);
+        Task<StatusEvent?> GetByCorrelationIdAsync(string transactionId, CancellationToken ct);
     }
 }
 

@@ -35,10 +35,15 @@ namespace Ship.Ses.Transmitter.Domain.Patients
         /// Optional metadata or source system indicator
         /// </summary>
         [SwaggerSchema("The client id / SHIP faciltiy ID of the source EMR.")]
+        [Required(ErrorMessage = "FacilityId is required.")]
         public string FacilityId { get; set; }
 
         [SwaggerSchema("The callback URL of the source EMR to notify upon completion.")]
         public string CallbackUrl { get; set; }
+
+        [SwaggerSchema("Optional correlation ID for tracing the request.")]
+        [Required(ErrorMessage = "CorrelationId is required")]
+        public string CorrelationId { get; set; }
 
 
     }

@@ -2,6 +2,8 @@
 using MongoDB.Bson;
 using Ship.Ses.Transmitter.Application.DTOs;
 using Ship.Ses.Transmitter.Application.Interfaces;
+using Ship.Ses.Transmitter.Domain.SyncModels;
+using Swashbuckle.AspNetCore.Annotations;
 using System.Net;
 
 namespace Ship.Ses.Ingestor.Api.Controllers.v1
@@ -11,6 +13,7 @@ namespace Ship.Ses.Ingestor.Api.Controllers.v1
     [ApiController]
     [Asp.Versioning.ApiVersion("1.0")]
     [Route("api/v{version:apiVersion}")]
+    //[SwaggerTag("Status callbacks from SHIP.")]
     public class ShipCallbackController : ControllerBase
     {
         private readonly IStatusCallbackService _statusCallbackService;
@@ -23,6 +26,12 @@ namespace Ship.Ses.Ingestor.Api.Controllers.v1
         }
 
         [HttpPost("patient/ack")]
+        [SwaggerOperation(
+            Summary = "Patient Transmission Status Callback",
+            Description = "Endpoint for receiving patient transmission status updates from SHIP.",
+            OperationId = "PatientTransmissionStatusCallback",
+            Tags = new[] { "Status Callbacks" }
+        )]
         [ProducesResponseType(typeof(PatientTransmissionStatusResponse), StatusCodes.Status200OK)]
         [ProducesResponseType(typeof(string), StatusCodes.Status400BadRequest)]
         [ProducesResponseType(StatusCodes.Status401Unauthorized)]
@@ -81,30 +90,36 @@ namespace Ship.Ses.Ingestor.Api.Controllers.v1
             }
         }
 
-        [HttpGet("patient/status/{transactionId}")]
+        [HttpGet("patient/status")]
+        [SwaggerOperation(
+    Summary = "Get Patient Transmission Status",
+    Description = "Retrieve the transmission status of a patient by transactionId or correlationId (exactly one).",
+    OperationId = "GetPatientTransmissionStatus",
+    Tags = new[] { "Status Queries" }
+)]
         [ProducesResponseType(typeof(PatientTransmissionStatusQueryResponse), StatusCodes.Status200OK)]
         [ProducesResponseType(typeof(string), StatusCodes.Status400BadRequest)]
         [ProducesResponseType(StatusCodes.Status404NotFound)]
         [ProducesResponseType(typeof(string), StatusCodes.Status500InternalServerError)]
         public async Task<IActionResult> GetPatientTransmissionStatus(
-    [FromRoute] string transactionId,
+    [FromQuery] string? transactionId,
+    [FromQuery] string? correlationId,
     [FromQuery] bool includeData = false,
     CancellationToken ct = default)
         {
-            // Correlation ID: use inbound header if present, else generate
-            var correlationId = Request.Headers.TryGetValue("x-correlation-id", out var corr)
-                ? corr.ToString()
-                : Guid.NewGuid().ToString();
-
-            if (string.IsNullOrWhiteSpace(transactionId))
-                return BadRequest("transactionId is required.");
+            // XOR: exactly one must be provided
+            var hasTx = !string.IsNullOrWhiteSpace(transactionId);
+            var hasCorr = !string.IsNullOrWhiteSpace(correlationId);
+            if (hasTx == hasCorr) // both true or both false
+                return BadRequest("Provide exactly one of 'transactionId' or 'correlationId'.");
 
             try
             {
-                var evt = await _statusCallbackService.GetByTransactionIdAsync(transactionId, ct);
+                StatusEvent? evt = hasTx
+                    ? await _statusCallbackService.GetByTransactionIdAsync(transactionId!, ct)
+                    : await _statusCallbackService.GetByCorrelationIdAsync(correlationId!, ct);
 
-                if (evt is null)
-                    return NotFound();
+                if (evt is null) return NotFound();
 
                 var response = new PatientTransmissionStatusQueryResponse
                 {
@@ -115,20 +130,11 @@ namespace Ship.Ses.Ingestor.Api.Controllers.v1
                     Message = evt.Message,
                     ResourceType = evt.ResourceType,
                     ResourceId = evt.ResourceId,
-                    ReceivedAtUtc = evt.ReceivedAtUtc,
-
-                    //CallbackStatus = evt.CallbackStatus,
-                    //CallbackAttempts = evt.CallbackAttempts,
-                    //CallbackNextAttemptAt = evt.CallbackNextAttemptAt,
-                    //CallbackDeliveredAt = evt.CallbackDeliveredAt,
-                    //EmrTargetUrl = evt.EmrTargetUrl,
-                    //EmrResponseStatusCode = evt.EmrResponseStatusCode,
-                    //EmrResponseBody = evt.EmrResponseBody
+                    ReceivedAtUtc = evt.ReceivedAtUtc
                 };
 
                 if (includeData && evt.Data != null)
                 {
-                    // Convert stored BsonDocument (evt.Data) to JsonObject for the response
                     var json = evt.Data.ToJson(new MongoDB.Bson.IO.JsonWriterSettings
                     {
                         OutputMode = MongoDB.Bson.IO.JsonOutputMode.CanonicalExtendedJson
@@ -143,6 +149,7 @@ namespace Ship.Ses.Ingestor.Api.Controllers.v1
                 return StatusCode(500, $"An unexpected error occurred: {ex.Message}");
             }
         }
+
 
     }
 }
