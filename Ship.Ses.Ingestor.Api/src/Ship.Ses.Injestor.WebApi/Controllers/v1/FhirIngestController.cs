@@ -6,6 +6,7 @@ using Ship.Ses.Ingestor.Api.Helper;
 using Ship.Ses.Ingestor.Api.Models;
 using Ship.Ses.Transmitter.Application.Patients;
 using Ship.Ses.Transmitter.Domain.Patients;
+using Ship.Ses.Transmitter.Infrastructure.Persistance;
 using Ship.Ses.Transmitter.WebApi.Filters;
 using Swashbuckle.AspNetCore.Annotations;
 using Swashbuckle.AspNetCore.Filters;
@@ -52,90 +53,86 @@ namespace Ship.Ses.Transmitter.WebApi.Controllers.v1
         [ProducesResponseType(typeof(FhirIngestAcceptedResponse), StatusCodes.Status202Accepted)]
         [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
         [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status401Unauthorized)]
+        [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status409Conflict)]
         [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status500InternalServerError)]
-        [SwaggerResponseExample(StatusCodes.Status202Accepted, typeof(FhirIngestAcceptedResponseExample))]
         public async Task<ActionResult<FhirIngestAcceptedResponse>> Post([FromBody] FhirIngestRequest request)
         {
-
-            // Correlation id for tracing (optional but useful)
-            //var correlationId = HttpContext.Request.Headers.TryGetValue("X-Correlation-Id", out var hdr) && !string.IsNullOrWhiteSpace(hdr)
-            //    ? hdr.ToString()
-            //    : HttpContext.TraceIdentifier;
-            //HttpContext.Response.Headers["X-Correlation-Id"] = correlationId;
-
             if (request == null)
-            {
-                //_logger.LogWarning("❌ Null request body. corr={CorrelationId}", correlationId);
                 return Problem(title: "Bad request", detail: "Request body cannot be null.",
                                statusCode: StatusCodes.Status400BadRequest);
-            }
 
-            // client_id (or fallback azp) from token
             var rawClientId = User.FindFirst("client_id")?.Value ?? User.FindFirst("azp")?.Value;
             if (string.IsNullOrWhiteSpace(rawClientId))
-            {
-                _logger.LogWarning("❌ Missing client claim. corr={CorrelationId}", request.CorrelationId);
                 return Problem(title: "Unauthorized", detail: "Missing 'client_id' or 'azp' claim.",
                                statusCode: StatusCodes.Status401Unauthorized);
-            }
 
-            // resource type
+            if (string.IsNullOrWhiteSpace(request.FacilityId))
+                return Problem(title: "Bad request", detail: "Missing required field: FacilityId.",
+                               statusCode: StatusCodes.Status400BadRequest);
+
             var resourceType = request.ResourceType?.Trim();
             if (string.IsNullOrWhiteSpace(resourceType))
-            {
-                _logger.LogWarning("❌ Missing ResourceType. corr={CorrelationId}", request?.CorrelationId);
                 return Problem(title: "Bad request", detail: "Missing required field: ResourceType.",
                                statusCode: StatusCodes.Status400BadRequest);
-            }
 
-            // Try to get a resourceId for better diagnostics
             var resourceId = TryGetResourceId(request);
 
-            // One scope so all logs in this request include these fields
             using var _ = _logger.BeginScope(new Dictionary<string, object?>
             {
                 ["CorrelationId"] = request.CorrelationId,
                 ["ClientId"] = SafeMessageHelper.Sanitize(rawClientId),
+                ["FacilityId"] = SafeMessageHelper.Sanitize(request.FacilityId),
                 ["ResourceType"] = SafeMessageHelper.Sanitize(resourceType),
                 ["ResourceId"] = SafeMessageHelper.Sanitize(resourceId ?? "(none)")
             });
 
-            // 👉 This is the line you want to reliably see:
-            _logger.LogInformation("📥 Received {ResourceType} {ResourceId} from client {ClientId}.", resourceType, resourceId ?? "(none)", rawClientId);
-
-            // Optional: quick idea of payload size (without logging the body)
-            var approxSize = TryGetPayloadSizeBytes(request);
-            if (approxSize is not null)
-                _logger.LogDebug("Payload size ≈ {Bytes} bytes.", approxSize);
-
             try
             {
-                await _ingestService.IngestAsync(request, rawClientId);
+                var result = await _ingestService.IngestAsyncReturningExisting(request, rawClientId);
 
-                _logger.LogInformation("✅ Accepted {ResourceType} {ResourceId} for client {ClientId}.", resourceType, resourceId ?? "(none)", rawClientId);
+                switch (result.Outcome)
+                {
+                    case IdempotentInsertOutcome.Inserted:
+                        _logger.LogInformation("✅ Ingested {Type} corr={Corr} client={Client} facility={Facility}",
+                            resourceType, request.CorrelationId, rawClientId, request.FacilityId);
+                        break;
+
+                    case IdempotentInsertOutcome.ReattemptChangedPayload:
+                        _logger.LogInformation("🔁 Re-attempt (changed payload) corr={Corr} client={Client} facility={Facility}",
+                            request.CorrelationId, rawClientId, request.FacilityId);
+                        break;
+
+                    case IdempotentInsertOutcome.IdempotentRepeatSamePayload:
+                        _logger.LogWarning("⚠️ Same payload re-submitted corr={Corr} client={Client} facility={Facility}",
+                            request.CorrelationId, rawClientId, request.FacilityId);
+                        return Problem(title: "Conflict",
+                            detail: $"Identical payload already submitted for correlationId '{request.CorrelationId}'.",
+                            statusCode: StatusCodes.Status409Conflict,
+                            extensions: new Dictionary<string, object?> { ["correlationId"] = request.CorrelationId });
+                }
+
                 var payload = new FhirIngestAcceptedResponse
                 {
                     Status = "accepted",
                     ResourceType = resourceType,
                     ResourceId = resourceId,
-                    CorrelationId = request?.CorrelationId,
+                    CorrelationId = request.CorrelationId,
                     Timestamp = DateTime.UtcNow
                 };
-                return Accepted(payload);                
+                return Accepted(payload);
             }
-            catch (JsonException jx)
+            catch (JsonException)
             {
-                _logger.LogWarning(jx, "Invalid JSON payload for {ResourceType} {ResourceId}.", resourceType, resourceId ?? "(none)");
                 return Problem(title: "Bad request", detail: "Invalid JSON payload.",
                                statusCode: StatusCodes.Status400BadRequest,
-                               extensions: new Dictionary<string, object?> { ["correlationId"] = request?.CorrelationId });
+                               extensions: new Dictionary<string, object?> { ["correlationId"] = request.CorrelationId });
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "🔥 Unexpected error ingesting {ResourceType} {ResourceId}.", resourceType, resourceId ?? "(none)");
+                _logger.LogError(ex, "🔥 Unexpected error ingesting {Type} {Id}.", resourceType, resourceId ?? "(none)");
                 return Problem(title: "Internal server error", detail: "Unexpected error occurred while processing the request.",
                                statusCode: StatusCodes.Status500InternalServerError,
-                               extensions: new Dictionary<string, object?> { ["correlationId"] = request?.CorrelationId });
+                               extensions: new Dictionary<string, object?> { ["correlationId"] = request.CorrelationId });
             }
         }
 

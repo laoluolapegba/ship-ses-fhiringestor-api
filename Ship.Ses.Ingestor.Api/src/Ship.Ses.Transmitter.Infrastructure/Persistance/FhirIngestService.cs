@@ -12,6 +12,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
+using System.Text.Json;
 using System.Threading.Tasks;
 
 namespace Ship.Ses.Transmitter.Infrastructure.Persistance
@@ -31,37 +32,52 @@ namespace Ship.Ses.Transmitter.Infrastructure.Persistance
             //_clientConfig = clientConfig ;
         }
 
-        public async Task IngestAsync(FhirIngestRequest request, string clientId)
+        public async Task<IdempotentInsertResult<PatientSyncRecord>> IngestAsyncReturningExisting(FhirIngestRequest request, string clientId)
         {
-            if (request == null) throw new ArgumentNullException(nameof(request));
+            if (request is null) throw new ArgumentNullException(nameof(request));
             if (string.IsNullOrWhiteSpace(clientId)) throw new ArgumentException("Client ID cannot be null or empty.", nameof(clientId));
+            if (string.IsNullOrWhiteSpace(request.CorrelationId)) throw new ArgumentException("CorrelationId is required.", nameof(request));
+            if (string.IsNullOrWhiteSpace(request.FacilityId)) throw new ArgumentException("FacilityId is required.", nameof(request));
 
-            var bson = BsonDocument.Parse(request.FhirJson.ToJsonString());
-            //var facilityId = await _clientConfig.GetFacilityIdAsync(clientId);
+            var canonical = request.FhirJson.ToJsonString(new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase });
+            var bson = BsonDocument.Parse(canonical);
 
-            var record = new PatientSyncRecord  // TODO: Dynamically resolve by resourceType
+            var record = new PatientSyncRecord
             {
+                ClientId = clientId,
+                FacilityId = request.FacilityId,
+                CorrelationId = request.CorrelationId,
                 ResourceType = request.ResourceType,
                 ResourceId = request.ResourceId,
                 FhirJson = bson,
+                PayloadHash = Sha256(canonical),
                 CreatedDate = DateTime.UtcNow,
                 Status = "Pending",
                 RetryCount = 0,
-                ExtractSource = ExtractSourceApi,
+                ExtractSource = "API",
                 TransactionId = null,
-                ApiResponsePayload = null, 
+                ApiResponsePayload = null,
                 LastAttemptAt = null,
                 SyncedResourceId = null,
-                FacilityId = request.FacilityId,
-                ClientEMRCallbackUrl = request.CallbackUrl,
-                CorrelationId = request.CorrelationId
-
+                ClientEMRCallbackUrl = request.CallbackUrl
             };
 
-            await _mongoSyncRepository.AddRecordAsync(record);
+            var result = await _mongoSyncRepository.TryInsertIdempotentAsync(record);
+            return result;
+        }
 
-            _logger.LogInformation("✅ Ingested {ResourceType} from {Source}", request.ResourceType, clientId);
+        private static string Sha256(string s)
+        {
+            using var sha = System.Security.Cryptography.SHA256.Create();
+            return Convert.ToHexString(sha.ComputeHash(Encoding.UTF8.GetBytes(s)));
         }
     }
 
+    public sealed class CorrelationConflictException : Exception
+    {
+        public CorrelationConflictException(string correlationId, string facilityId, string clientId)
+            : base($"Payload conflict for correlationId '{correlationId}' (client='{clientId}', facility='{facilityId}').") { }
+    }
 }
+
+

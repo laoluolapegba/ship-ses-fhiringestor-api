@@ -33,10 +33,69 @@ namespace Ship.Ses.Transmitter.Infrastructure.Persistance.Configuration.Domain
             _database = client.GetDatabase(settings.Value.DatabaseName);
         }
 
-        //public MongoSyncRepository(IOptions<SourceDbSettings> settings, IMongoClient client)
-        //{
-        //    _database = client.GetDatabase(settings.Value.DatabaseName);
-        //}
+
+        public async Task<IdempotentInsertResult<PatientSyncRecord>> TryInsertIdempotentAsync(PatientSyncRecord record)
+        {
+            if (record is null) throw new ArgumentNullException(nameof(record));
+
+            var col = _database.GetCollection<PatientSyncRecord>(record.CollectionName);
+
+            try
+            {
+                await col.InsertOneAsync(record);
+                return new() { Outcome = IdempotentInsertOutcome.Inserted, Document = record };
+            }
+            catch (MongoWriteException mwx) when (mwx.WriteError?.Category == ServerErrorCategory.DuplicateKey)
+            {
+                // Duplicate on (clientId, facilityId, correlationId) unique index
+                var existing = await col.Find(x =>
+                        x.ClientId == record.ClientId &&
+                        x.FacilityId == record.FacilityId &&
+                        x.CorrelationId == record.CorrelationId)
+                    .FirstOrDefaultAsync();
+
+                if (existing is null) throw; // extremely rare edge: unique error but not found
+
+                var samePayload = string.Equals(existing.PayloadHash, record.PayloadHash, StringComparison.OrdinalIgnoreCase);
+
+                if (samePayload)
+                {
+                    // SAME bad payload re-submitted with same correlationId → reject (409)
+                    return new()
+                    {
+                        Outcome = IdempotentInsertOutcome.IdempotentRepeatSamePayload,
+                        Document = existing
+                    };
+                }
+
+                // DIFFERENT payload with same correlationId → treat as re-attempt
+                // Persist the new payload & reset processing fields atomically.
+                var filter = Builders<PatientSyncRecord>.Filter.Eq(x => x.Id, existing.Id);
+                var update = Builders<PatientSyncRecord>.Update
+                    .Set(x => x.FhirJson, record.FhirJson)
+                    .Set(x => x.PayloadHash, record.PayloadHash)
+                    .Set(x => x.ResourceType, record.ResourceType)
+                    .Set(x => x.ResourceId, record.ResourceId)
+                    .Set(x => x.Status, "Pending")
+                    .Set(x => x.RetryCount, 0)
+                    .Set(x => x.LastAttemptAt, null)
+                    .Set(x => x.ApiResponsePayload, null)
+                    .Set(x => x.SyncedResourceId, null)
+                    .Set(x => x.ClientEMRCallbackUrl, record.ClientEMRCallbackUrl);
+
+                _ = await col.UpdateOneAsync(filter, update);
+
+                // Re-read the updated doc (or project fields you care about)
+                var updated = await col.Find(filter).FirstAsync();
+
+                return new()
+                {
+                    Outcome = IdempotentInsertOutcome.ReattemptChangedPayload,
+                    Document = updated
+                };
+            }
+        }
+
 
         public async Task<IEnumerable<T>> GetPendingRecordsAsync<T>() where T : FhirSyncRecord, new()
         {
@@ -98,4 +157,5 @@ namespace Ship.Ses.Transmitter.Infrastructure.Persistance.Configuration.Domain
 
 
     }
+   
 }

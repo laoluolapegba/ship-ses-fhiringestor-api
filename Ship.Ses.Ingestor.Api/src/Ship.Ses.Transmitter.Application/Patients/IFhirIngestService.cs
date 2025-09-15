@@ -9,6 +9,7 @@ namespace Ship.Ses.Transmitter.Application.Patients
 {
     public interface IFhirIngestService
     {
-        Task IngestAsync(FhirIngestRequest request, string clientId);
+        //Task IngestAsync(FhirIngestRequest request, string clientId);
+        Task<IdempotentInsertResult<PatientSyncRecord>> IngestAsyncReturningExisting(FhirIngestRequest request, string clientId);
     }
 }

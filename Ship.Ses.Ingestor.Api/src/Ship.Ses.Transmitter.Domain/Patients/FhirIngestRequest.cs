@@ -45,6 +45,5 @@ namespace Ship.Ses.Transmitter.Domain.Patients
         [Required(ErrorMessage = "CorrelationId is required")]
         public string CorrelationId { get; set; }
 
-
     }
 }

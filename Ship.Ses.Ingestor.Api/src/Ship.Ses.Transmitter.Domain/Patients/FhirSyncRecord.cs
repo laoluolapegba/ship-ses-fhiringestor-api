@@ -66,7 +66,9 @@ namespace Ship.Ses.Transmitter.Domain.Patients
 
         [BsonElement("correlationId")]
         public string CorrelationId { get; set; }
-
-
+        [BsonElement("clientId")]
+        public string ClientId { get; set; } = default!;
+        [BsonElement("payloadHash")]
+        public string PayloadHash { get; set; } = default!;  // SHA-256 of canonical JSON
     }
 }
