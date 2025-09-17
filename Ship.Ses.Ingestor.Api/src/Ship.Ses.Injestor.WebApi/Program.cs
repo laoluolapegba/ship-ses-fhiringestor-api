@@ -13,6 +13,7 @@ using Ship.Ses.Transmitter.Application.Patients;
 using Ship.Ses.Transmitter.Application.Services;
 using Ship.Ses.Transmitter.Application.Shared;
 using Ship.Ses.Transmitter.Domain.Patients;
+using Ship.Ses.Transmitter.Infrastructure.Authentication;
 using Ship.Ses.Transmitter.Infrastructure.Installers;
 using Ship.Ses.Transmitter.Infrastructure.Persistance;
 using Ship.Ses.Transmitter.Infrastructure.Persistance.Configuration.Domain;
@@ -130,9 +131,7 @@ builder.InstallApplicationSettings();
 
 builder.InstallDependencyInjectionRegistrations();
 builder.Services.AddConfiguredRateLimiting(builder.Configuration);
-//builder.InstallCors();
-
-
+builder.Services.AddHmacAuth(builder.Configuration);
 
 var app = builder.Build();
 app.UseSwagger();
@@ -160,6 +159,7 @@ if (app.Environment.IsDevelopment())
 app.UseCors(CorsInstaller.DefaultCorsPolicyName);
 
 app.UseAuthentication();
+app.UseHmacAuth();
 app.UseAuthorization();
 
 app.MapControllers();

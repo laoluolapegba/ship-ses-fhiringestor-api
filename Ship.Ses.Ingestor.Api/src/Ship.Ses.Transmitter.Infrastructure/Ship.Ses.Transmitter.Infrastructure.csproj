@@ -48,7 +48,6 @@
     </None>
   </ItemGroup>
   <ItemGroup>
-    <Folder Include="Authentication\" />
     <Folder Include="BackgroundTasks\" />
     <Folder Include="Events\" />
     <Folder Include="Filters\" />
