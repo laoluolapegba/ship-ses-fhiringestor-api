@@ -18,5 +18,6 @@ namespace Ship.Ses.Transmitter.Domain.Patients
         Task BulkUpdateStatusAsync<T>(
     Dictionary<ObjectId, (string status, string message, string transactionId, string rawResponse)> updates
 ) where T : FhirSyncRecord, new();
+        Task<FhirSyncRecord> GetPatientByTransactionIdAsync(string transactionId, CancellationToken cancellationToken);
     }
 }

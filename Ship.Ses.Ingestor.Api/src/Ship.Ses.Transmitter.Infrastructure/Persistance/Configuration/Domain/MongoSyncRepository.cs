@@ -152,10 +152,15 @@ namespace Ship.Ses.Transmitter.Infrastructure.Persistance.Configuration.Domain
             await collection.BulkWriteAsync(models);
         }
 
-        
-
-
-
+        public async Task<FhirSyncRecord> GetPatientByTransactionIdAsync(string transactionId, CancellationToken cancellationToken)
+        {
+            if (string.IsNullOrWhiteSpace(transactionId))
+                throw new ArgumentNullException(nameof(transactionId));
+            var collection = _database.GetCollection<PatientSyncRecord>(new PatientSyncRecord().CollectionName);
+            var filter = Builders<PatientSyncRecord>.Filter.Eq(r => r.TransactionId, transactionId);
+            var result = await collection.Find(filter).FirstOrDefaultAsync(cancellationToken);
+            return result;
+        }
     }
    
 }

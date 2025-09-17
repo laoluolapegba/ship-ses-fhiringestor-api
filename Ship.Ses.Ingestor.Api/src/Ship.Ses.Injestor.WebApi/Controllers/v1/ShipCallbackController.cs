@@ -43,7 +43,7 @@ namespace Ship.Ses.Ingestor.Api.Controllers.v1
             // if (!Request.Headers.TryGetValue("x-correlation-id", out var corr)) return BadRequest("x-correlation-id header is required.");
             // if (!Request.Headers.TryGetValue("x-client-id", out var clientId)) return Unauthorized("x-client-id header is missing or invalid.");
             _logger.LogInformation(
-    "PatientTransmissionStatus endpoint called with payload: {requestJson}",
+    "PatientTransmission ack endpoint called with payload: {requestJson}",
     System.Text.Json.JsonSerializer.Serialize(request)
 );
 
@@ -60,17 +60,17 @@ namespace Ship.Ses.Ingestor.Api.Controllers.v1
                 var requestHeaders = Request?.Headers?.ToDictionary(h => h.Key, h => h.Value.ToString())
                                      ?? new Dictionary<string, string>();
 
-                var correlationId = Request.Headers.TryGetValue("x-correlation-id", out var corr)
-                    ? corr.ToString()
-                    : Guid.NewGuid().ToString();
+                //var correlationId = Request.Headers.TryGetValue("x-correlation-id", out var corr)
+                //    ? corr.ToString()
+                //    : Guid.NewGuid().ToString();
 
                 var response = await _statusCallbackService.ProcessStatusUpdateAsync(
                     requestHeaders,
                     request,
                     ct);
 
-                response.CorrelationId = correlationId;
-                _logger.LogInformation("Successfully processed status update for correlationId: {CorrelationId}", correlationId);
+                //response.CorrelationId = correlationId;
+                _logger.LogInformation("Successfully processed status update for transactionId: {TransactionId}", request.TransactionId);
                 return Ok(response);
             }
             catch (InvalidOperationException ex)

@@ -4,6 +4,7 @@ using MongoDB.Bson;
 using Ship.Ses.Transmitter.Application.DTOs;
 using Ship.Ses.Transmitter.Application.Interfaces;
 using Ship.Ses.Transmitter.Domain.Events;
+using Ship.Ses.Transmitter.Domain.Patients;
 using Ship.Ses.Transmitter.Domain.SyncModels;
 using System;
 using System.Collections.Generic;
@@ -22,24 +23,42 @@ namespace Ship.Ses.Transmitter.Application.Services
     {
         private readonly ILogger<StatusCallbackService> _logger;
         private readonly IStatusEventRepository _repository;
+        private readonly IMongoSyncRepository _mongoRepo; // <-- NEW
 
-        public StatusCallbackService(ILogger<StatusCallbackService> logger, IStatusEventRepository repository)
+        public StatusCallbackService(
+            ILogger<StatusCallbackService> logger,
+            IStatusEventRepository repository,
+            IMongoSyncRepository mongoRepo) 
         {
             _logger = logger;
             _repository = repository;
+            _mongoRepo = mongoRepo;
         }
 
         public async Task<PatientTransmissionStatusResponse> ProcessStatusUpdateAsync(
-    Dictionary<string, string> requestHeaders,
-    PatientTransmissionStatusRequest request,
-    CancellationToken cancellationToken = default)
+            Dictionary<string, string> requestHeaders,
+            PatientTransmissionStatusRequest request,
+            CancellationToken cancellationToken = default)
         {
             if (request is null) throw new ArgumentException("Request cannot be null.");
             if (string.IsNullOrWhiteSpace(request.TransactionId)) throw new ArgumentException("TransactionId is required.");
 
             _logger.LogInformation("Processing status update for transactionId: {TransactionId}", request.TransactionId);
 
-            // Optional hints via headers (caller can pass these if they want)
+            // Resolve correlation/client/facility from the original ingest, using the transactionId
+            var syncRecord = await _mongoRepo.GetPatientByTransactionIdAsync(request.TransactionId, cancellationToken);
+            if (syncRecord is null)
+            {
+                _logger.LogWarning(
+                    "No FHIR sync record found for transactionId {TxId}. Proceeding without correlationId.",
+                    request.TransactionId);
+            }
+
+            var correlationId = syncRecord?.CorrelationId;
+            var clientId = syncRecord?.ClientId;
+            var facilityId = syncRecord?.FacilityId;
+
+            // resource hints via headers (caller can pass these if they want)
             const string HeaderResourceType = "x-fhir-resource-type";
             const string HeaderResourceId = "x-fhir-resource-id";
 
@@ -50,25 +69,29 @@ namespace Ship.Ses.Transmitter.Application.Services
                 _logger.LogDebug("No resource ID supplied in headers for transactionId {TxId}.", request.TransactionId);
 
             _logger.LogInformation(
-                "Using resourceType '{ResourceType}' and resourceId '{ResourceId}' for transactionId {TxId}.",
-                resourceType, resourceId, request.TransactionId
+                "Using resourceType '{ResourceType}', resourceId '{ResourceId}', correlationId '{CorrelationId}', clientId '{ClientId}', facilityId '{FacilityId}' for tx {TxId}.",
+                resourceType, resourceId, correlationId ?? "(none)", clientId ?? "(none)", facilityId ?? "(none)", request.TransactionId
             );
 
-            // No request.Data anymore. We compute a hash over the stable fields.
-            string? dataCanonical = null; // intentionally null since no payload body beyond the DTO
+            //Hash over stable fields
+            string? dataCanonical = null;
             var payloadHash = ComputePayloadHash(
                 status: request.Status,
                 message: request.Message,
                 shipId: request.ShipId,
                 txId: request.TransactionId,
-                dataCanonical: dataCanonical // null → dataSha256 omitted in canonical
+                dataCanonical: dataCanonical
             );
 
             _logger.LogDebug("Computed payload hash: {PayloadHash}", payloadHash);
 
+            //Build status event including correlation/client/facility if available
             var newEvent = new StatusEvent
             {
                 TransactionId = request.TransactionId,
+                CorrelationId = correlationId,
+                //ClientId = clientId,
+                //FacilityId = facilityId,
                 ResourceType = resourceType,
                 ResourceId = resourceId,
                 ShipId = request.ShipId,
@@ -78,9 +101,10 @@ namespace Ship.Ses.Transmitter.Application.Services
                 Source = "SHIP",
                 Headers = (requestHeaders?.Count ?? 0) > 0 ? JsonSerializer.Serialize(requestHeaders) : null,
                 PayloadHash = payloadHash,
-                Data = null // <-- important: no BSON payload now that Data is removed
+                Data = null
             };
 
+            // 5) Upsert with your existing repo logic (unique on transactionId or (transactionId, source))
             var (persisted, duplicate, conflict) = await _repository.UpsertPatientStatusAsync(newEvent, cancellationToken);
 
             if (conflict)
@@ -107,34 +131,14 @@ namespace Ship.Ses.Transmitter.Application.Services
         }
 
         public Task<StatusEvent?> GetByTransactionIdAsync(string transactionId, CancellationToken ct = default) =>
-        _repository.GetByTransactionIdAsync(transactionId, ct);
+            _repository.GetByTransactionIdAsync(transactionId, ct);
+
         public Task<StatusEvent?> GetByCorrelationIdAsync(string correlationId, CancellationToken ct = default) =>
-        _repository.GetByCorrelationIdAsync(correlationId, ct);
-        private static string ComputePayloadHash(string status, string message, string shipId, string txId, string dataCanonical)
-        {
-            static string Sha256(string s)
-            {
-                using var sha = SHA256.Create();
-                var bytes = sha.ComputeHash(Encoding.UTF8.GetBytes(s));
-                return Convert.ToHexString(bytes);
-            }
-
-            var canonical = JsonSerializer.Serialize(new
-            {
-                status,
-                message,
-                shipId,
-                transactionId = txId,
-                dataSha256 = string.IsNullOrEmpty(dataCanonical) ? null : Sha256(dataCanonical)
-            });
-
-            return Sha256(canonical);
-        }
+            _repository.GetByCorrelationIdAsync(correlationId, ct);
 
         private static string? TryGetHeader(IDictionary<string, string>? headers, string key)
         {
             if (headers is null || headers.Count == 0) return null;
-
             // Case-insensitive lookup
             foreach (var kvp in headers)
             {
@@ -143,7 +147,26 @@ namespace Ship.Ses.Transmitter.Application.Services
             }
             return null;
         }
+
+        private static string ComputePayloadHash(string status, string message, string shipId, string txId, string dataCanonical)
+        {
+            static string Sha256(string s)
+            {
+                using var sha = SHA256.Create();
+                var bytes = sha.ComputeHash(Encoding.UTF8.GetBytes(s)); return Convert.ToHexString(bytes);
+            }
+            var canonical = JsonSerializer.Serialize(new
+            {
+                status,
+                message,
+                shipId,
+                transactionId = txId,
+                dataSha256 = string.IsNullOrEmpty(dataCanonical) ? null : Sha256(dataCanonical)
+            });
+            return Sha256(canonical);
+        }
     }
+    
 
 
     public static class PayloadHash
