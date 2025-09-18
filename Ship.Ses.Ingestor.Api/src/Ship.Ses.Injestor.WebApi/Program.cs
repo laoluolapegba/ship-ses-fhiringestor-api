@@ -78,17 +78,14 @@ builder.Services.AddScoped<IStatusEventRepository, StatusEventRepository>();
 
 builder.Services.AddScoped<IStatusCallbackService, StatusCallbackService>();
 
-// Register Services & Observability
-//builder.Services.ConfigureTracing(builder.Configuration);
 
 var appSettings = builder.Configuration.GetSection(nameof(AppSettings)).Get<AppSettings>();
 
 
 
-//builder.Services.Configure<KestrelServerOptions>(
- //         builder.Configuration.GetSection("Kestrel"));
+builder.Services.Configure<KestrelServerOptions>(
+          builder.Configuration.GetSection("Kestrel"));
 
-//builder.Services.AddScoped<IClientSyncConfigProvider, EfClientSyncConfigProvider>();
 
 // Register IFhirIngestService 
 builder.Services.AddScoped<IFhirIngestService, FhirIngestService>();
