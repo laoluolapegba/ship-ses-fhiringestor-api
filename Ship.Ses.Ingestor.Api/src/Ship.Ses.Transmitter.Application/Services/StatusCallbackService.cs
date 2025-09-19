@@ -90,8 +90,8 @@ namespace Ship.Ses.Transmitter.Application.Services
             {
                 TransactionId = request.TransactionId,
                 CorrelationId = correlationId,
-                //ClientId = clientId,
-                //FacilityId = facilityId,
+                ClientId = clientId,
+                FacilityId = facilityId,
                 ResourceType = resourceType,
                 ResourceId = resourceId,
                 ShipId = request.ShipId,
@@ -101,7 +101,16 @@ namespace Ship.Ses.Transmitter.Application.Services
                 Source = "SHIP",
                 Headers = (requestHeaders?.Count ?? 0) > 0 ? JsonSerializer.Serialize(requestHeaders) : null,
                 PayloadHash = payloadHash,
-                Data = null
+                Data = null,
+                CallbackStatus = "Pending",
+                CallbackAttempts = 0,
+                CallbackNextAttemptAt = DateTime.UtcNow,
+                CallbackLastError = null,
+                EmrTargetUrl = syncRecord?.ClientEMRCallbackUrl,
+                CallbackDeliveredAt = null,
+                EmrResponseBody = null,
+                EmrResponseStatusCode = null
+
             };
 
             // 5) Upsert with your existing repo logic (unique on transactionId or (transactionId, source))
@@ -109,7 +118,7 @@ namespace Ship.Ses.Transmitter.Application.Services
 
             if (conflict)
             {
-                _logger.LogError("Conflict detected for transactionId {TxId}. The incoming payload conflicts with an existing record.", request.TransactionId);
+                _logger.LogError("Transaction Status already accepted for transactionId {TxId}. The incoming payload conflicts with an existing record.", request.TransactionId);
                 throw new InvalidOperationException("Conflicting payload for the same transactionId; existing record retained.");
             }
             else if (duplicate)

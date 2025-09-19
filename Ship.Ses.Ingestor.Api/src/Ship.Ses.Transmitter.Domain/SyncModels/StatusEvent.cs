@@ -36,15 +36,43 @@ namespace Ship.Ses.Transmitter.Domain.SyncModels
         public string Source { get; set; } = "SHIP";
 
         [BsonElement("headers")]
-        public string? Headers { get; set; }                    // raw serialized request headers (optional)
+        public string? Headers { get; set; } 
 
         [BsonElement("payloadHash")]
-        public string PayloadHash { get; set; } = default!;     // canonical hash to detect conflicts
+        public string PayloadHash { get; set; } = default!;
 
         [BsonElement("data")]
-        public MongoDB.Bson.BsonDocument Data { get; set; } = default!; // full Patient JSON
+        public MongoDB.Bson.BsonDocument Data { get; set; } = default!; 
         [BsonElement("correlationId")]
         public string CorrelationId { get; set; }
+        // Outbox fields for EMR callback processing
+        [BsonElement("callbackStatus")]
+        public string CallbackStatus { get; set; } = "Pending";  // Pending|InFlight|Succeeded|Failed
+
+        [BsonElement("callbackAttempts")]
+        public int CallbackAttempts { get; set; }
+
+        [BsonElement("callbackNextAttemptAt")]
+        public DateTime? CallbackNextAttemptAt { get; set; } = DateTime.UtcNow;
+
+        [BsonElement("callbackLastError")]
+        public string? CallbackLastError { get; set; }
+
+        [BsonElement("callbackDeliveredAt")]
+        public DateTime? CallbackDeliveredAt { get; set; }
+
+        [BsonElement("emrTargetUrl")]
+        public string? EmrTargetUrl { get; set; }
+
+        [BsonElement("emrResponseStatusCode")]
+        public int? EmrResponseStatusCode { get; set; }
+
+        [BsonElement("emrResponseBody")]
+        public string? EmrResponseBody { get; set; }
+        [BsonElement("clientId")]
+        public string? ClientId { get; set; }
+        [BsonElement("facilityId")]
+        public string? FacilityId { get; set; }
         public override string CollectionName => "patientstatusevents";
     }
 
