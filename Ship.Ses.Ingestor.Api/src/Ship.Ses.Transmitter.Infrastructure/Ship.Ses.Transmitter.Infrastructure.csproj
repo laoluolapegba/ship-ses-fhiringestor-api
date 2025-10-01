@@ -40,7 +40,7 @@
     <PackageReference Include="System.Linq.Dynamic.Core" Version="1.6.0.2" />
   </ItemGroup>
   <ItemGroup>
-    <ProjectReference Include="..\Ship.Ses.Transmitter.Application\Ship.Ses.Transmitter.Application.csproj" />
+    <ProjectReference Include="..\Ship.Ses.Transmitter.Application\Ship.Ses.Ingestor.Application.csproj" />
   </ItemGroup>
   <ItemGroup>
     <None Update="EmailTemplates\WelcomeEmail.html">

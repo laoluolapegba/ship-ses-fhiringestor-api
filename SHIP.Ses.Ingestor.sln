@@ -5,7 +5,7 @@ VisualStudioVersion = 17.13.35818.85
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Ship.Ses.Transmitter.Domain", "Ship.Ses.Ingestor.Api\src\Ship.Ses.Transmitter.Domain\Ship.Ses.Transmitter.Domain.csproj", "{3C983324-FEF1-7C62-0049-ECC48615532E}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Ship.Ses.Transmitter.Application", "Ship.Ses.Ingestor.Api\src\Ship.Ses.Transmitter.Application\Ship.Ses.Transmitter.Application.csproj", "{9886EF06-517E-2848-13F9-3E26040C2A28}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Ship.Ses.Ingestor.Application", "Ship.Ses.Ingestor.Api\src\Ship.Ses.Transmitter.Application\Ship.Ses.Ingestor.Application.csproj", "{9886EF06-517E-2848-13F9-3E26040C2A28}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Ship.Ses.Transmitter.Infrastructure", "Ship.Ses.Ingestor.Api\src\Ship.Ses.Transmitter.Infrastructure\Ship.Ses.Transmitter.Infrastructure.csproj", "{0E52C4EE-7B9E-9617-DD95-A2CBCD336A2C}"
 EndProject
