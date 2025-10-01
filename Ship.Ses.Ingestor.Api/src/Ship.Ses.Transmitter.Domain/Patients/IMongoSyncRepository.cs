@@ -14,10 +14,10 @@ namespace Ship.Ses.Transmitter.Domain.Patients
         Task AddRecordAsync<T>(T record) where T : FhirSyncRecord;
         Task UpdateRecordAsync<T>(T record) where T : FhirSyncRecord;
         Task<IEnumerable<T>> GetByStatusAsync<T>(string status, int skip = 0, int take = 100) where T : FhirSyncRecord, new();
-        Task<IdempotentInsertResult<PatientSyncRecord>> TryInsertIdempotentAsync(PatientSyncRecord record);
+        Task<IdempotentInsertResult<T>> TryInsertIdempotentAsync<T>(T record) where T : FhirSyncRecord;
         Task BulkUpdateStatusAsync<T>(
     Dictionary<ObjectId, (string status, string message, string transactionId, string rawResponse)> updates
 ) where T : FhirSyncRecord, new();
-        Task<FhirSyncRecord> GetPatientByTransactionIdAsync(string transactionId, CancellationToken cancellationToken);
+        Task<FhirSyncRecord?> GetByTransactionIdAsync(string transactionId, CancellationToken cancellationToken);
     }
 }

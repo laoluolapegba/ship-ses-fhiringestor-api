@@ -46,7 +46,7 @@ namespace Ship.Ses.Transmitter.Application.Services
             _logger.LogInformation("Processing status update for transactionId: {TransactionId}", request.TransactionId);
 
             // Resolve correlation/client/facility from the original ingest, using the transactionId
-            var syncRecord = await _mongoRepo.GetPatientByTransactionIdAsync(request.TransactionId, cancellationToken);
+            var syncRecord = await _mongoRepo.GetByTransactionIdAsync(request.TransactionId, cancellationToken);
             if (syncRecord is null)
             {
                 _logger.LogWarning(
@@ -58,12 +58,15 @@ namespace Ship.Ses.Transmitter.Application.Services
             var clientId = syncRecord?.ClientId;
             var facilityId = syncRecord?.FacilityId;
 
-            // resource hints via headers (caller can pass these if they want)
-            //const string HeaderResourceType = "x-fhir-resource-type";
-            //const string HeaderResourceId = "x-fhir-resource-id";
+            const string HeaderResourceType = "x-fhir-resource-type";
+            const string HeaderResourceId = "x-fhir-resource-id";
 
-            var resourceType = syncRecord?.ResourceType;
-            var resourceId = request.TransactionId; //based on the info we have, we can only reliably use transactionId as a stand-in for resourceId
+            var headerResourceType = TryGetHeader(requestHeaders, HeaderResourceType);
+            var headerResourceId = TryGetHeader(requestHeaders, HeaderResourceId);
+
+            var resourceType = syncRecord?.ResourceType ?? headerResourceType;
+            resourceType ??= "Unknown";
+            var resourceId = syncRecord?.ResourceId ?? headerResourceId ?? request.TransactionId;
 
             //if (resourceId is null)
             //    _logger.LogDebug("No resource ID supplied in headers for transactionId {TxId}.", request.TransactionId);
@@ -114,7 +117,7 @@ namespace Ship.Ses.Transmitter.Application.Services
             };
 
             //) Upsert with  existing repo logic (unique on transactionId or (transactionId, source))
-            var (persisted, duplicate, conflict) = await _repository.UpsertPatientStatusAsync(newEvent, cancellationToken);
+            var (persisted, duplicate, conflict) = await _repository.UpsertStatusEventAsync(newEvent, cancellationToken);
 
             if (conflict)
             {
