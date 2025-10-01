@@ -1,6 +1,6 @@
-﻿namespace Ship.Ses.Transmitter.WebApi.Installers
+﻿namespace Ship.Ses.Ingestor.WebApi.Installers
 {
-    // Ship.Ses.Transmitter.WebApi/Extensions/AuthenticationExtensions.cs
+    // Ship.Ses.Ingestor.WebApi/Extensions/AuthenticationExtensions.cs
 
     using Microsoft.AspNetCore.Authentication.JwtBearer;
     using Microsoft.Extensions.Configuration;

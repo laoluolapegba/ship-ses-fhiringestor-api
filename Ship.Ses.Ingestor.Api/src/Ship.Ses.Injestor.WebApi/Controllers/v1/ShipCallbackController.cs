@@ -1,8 +1,8 @@
 ﻿using Microsoft.AspNetCore.Mvc;
 using MongoDB.Bson;
-using Ship.Ses.Transmitter.Application.DTOs;
-using Ship.Ses.Transmitter.Application.Interfaces;
-using Ship.Ses.Transmitter.Domain.SyncModels;
+using Ship.Ses.Ingestor.Application.DTOs;
+using Ship.Ses.Ingestor.Application.Interfaces;
+using Ship.Ses.Ingestor.Domain.SyncModels;
 using Swashbuckle.AspNetCore.Annotations;
 using System.Net;
 
