@@ -59,14 +59,14 @@ namespace Ship.Ses.Transmitter.Application.Services
             var facilityId = syncRecord?.FacilityId;
 
             // resource hints via headers (caller can pass these if they want)
-            const string HeaderResourceType = "x-fhir-resource-type";
-            const string HeaderResourceId = "x-fhir-resource-id";
+            //const string HeaderResourceType = "x-fhir-resource-type";
+            //const string HeaderResourceId = "x-fhir-resource-id";
 
-            var resourceType = TryGetHeader(requestHeaders, HeaderResourceType) ?? "Patient";
-            var resourceId = TryGetHeader(requestHeaders, HeaderResourceId);
+            var resourceType = syncRecord?.ResourceType;
+            var resourceId = request.TransactionId; //based on the info we have, we can only reliably use transactionId as a stand-in for resourceId
 
-            if (resourceId is null)
-                _logger.LogDebug("No resource ID supplied in headers for transactionId {TxId}.", request.TransactionId);
+            //if (resourceId is null)
+            //    _logger.LogDebug("No resource ID supplied in headers for transactionId {TxId}.", request.TransactionId);
 
             _logger.LogInformation(
                 "Using resourceType '{ResourceType}', resourceId '{ResourceId}', correlationId '{CorrelationId}', clientId '{ClientId}', facilityId '{FacilityId}' for tx {TxId}.",
@@ -113,7 +113,7 @@ namespace Ship.Ses.Transmitter.Application.Services
 
             };
 
-            // 5) Upsert with your existing repo logic (unique on transactionId or (transactionId, source))
+            //) Upsert with  existing repo logic (unique on transactionId or (transactionId, source))
             var (persisted, duplicate, conflict) = await _repository.UpsertPatientStatusAsync(newEvent, cancellationToken);
 
             if (conflict)
@@ -123,7 +123,7 @@ namespace Ship.Ses.Transmitter.Application.Services
             }
             else if (duplicate)
             {
-                _logger.LogInformation("Duplicate callback received for transactionId {TxId}. No new record was created.", request.TransactionId);
+                _logger.LogInformation("Callback received for transactionId {TxId}. record updated.", request.TransactionId);
             }
             else
             {
