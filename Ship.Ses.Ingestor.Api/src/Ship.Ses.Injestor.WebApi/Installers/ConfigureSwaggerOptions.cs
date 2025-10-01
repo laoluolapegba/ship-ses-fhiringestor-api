@@ -4,7 +4,7 @@ using Microsoft.OpenApi.Models;
 using Swashbuckle.AspNetCore.SwaggerGen;
 
 
-namespace Ship.Ses.Transmitter.WebApi.Installers
+namespace Ship.Ses.Ingestor.WebApi.Installers
 {
     public class ConfigureSwaggerOptions : IConfigureOptions<SwaggerGenOptions>
     {

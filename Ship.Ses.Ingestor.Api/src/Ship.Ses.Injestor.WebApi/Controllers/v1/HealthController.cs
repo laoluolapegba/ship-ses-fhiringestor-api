@@ -1,13 +1,13 @@
 ﻿using Asp.Versioning;
 using Microsoft.AspNetCore.Mvc;
-using Ship.Ses.Transmitter.Application.DTOs;
-using Ship.Ses.Transmitter.Application.Shared;
-using Ship.Ses.Transmitter.Domain;
+using Ship.Ses.Ingestor.Application.DTOs;
+using Ship.Ses.Ingestor.Application.Shared;
+using Ship.Ses.Ingestor.Domain;
 using Swashbuckle.AspNetCore.Annotations;
 using System.Diagnostics;
 using System.Reflection;
 
-namespace Ship.Ses.Transmitter.WebApi.Controllers.v1
+namespace Ship.Ses.Ingestor.WebApi.Controllers.v1
 {
     [ApiController]
     [Route("/health")] 

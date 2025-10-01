@@ -4,10 +4,10 @@ using Microsoft.AspNetCore.Mvc;
 using OpenTelemetry.Resources;
 using Ship.Ses.Ingestor.Api.Helper;
 using Ship.Ses.Ingestor.Api.Models;
-using Ship.Ses.Transmitter.Application.Patients;
-using Ship.Ses.Transmitter.Domain.Patients;
-using Ship.Ses.Transmitter.Infrastructure.Persistance;
-using Ship.Ses.Transmitter.WebApi.Filters;
+using Ship.Ses.Ingestor.Application.Patients;
+using Ship.Ses.Ingestor.Domain.Patients;
+using Ship.Ses.Ingestor.Infrastructure.Persistance;
+using Ship.Ses.Ingestor.WebApi.Filters;
 using Swashbuckle.AspNetCore.Annotations;
 using Swashbuckle.AspNetCore.Filters;
 using System.Net;
@@ -15,7 +15,7 @@ using System.Security.AccessControl;
 using System.Security.Claims;
 using System.Text;
 using System.Text.Json;
-namespace Ship.Ses.Transmitter.WebApi.Controllers.v1
+namespace Ship.Ses.Ingestor.WebApi.Controllers.v1
 {
 
     /// <summary>

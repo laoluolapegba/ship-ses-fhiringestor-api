@@ -33,7 +33,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\Ship.Ses.Transmitter.Infrastructure\Ship.Ses.Transmitter.Infrastructure.csproj" />
+    <ProjectReference Include="..\Ship.Ses.Ingestor.Infrastructure\Ship.Ses.Ingestor.Infrastructure.csproj" />
   </ItemGroup>
   <PropertyGroup>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>

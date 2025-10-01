@@ -1,10 +1,10 @@
 ﻿using Microsoft.OpenApi.Any;
 using Microsoft.OpenApi.Models;
-using Ship.Ses.Transmitter.Domain.Patients;
+using Ship.Ses.Ingestor.Domain.Patients;
 using System.Text.Json.Nodes;
 using Swashbuckle.AspNetCore.Filters;
 
-namespace Ship.Ses.Transmitter.WebApi.Filters
+namespace Ship.Ses.Ingestor.WebApi.Filters
 {
     public class FhirIngestRequestExample : IExamplesProvider<FhirIngestRequest>
     {

@@ -7,7 +7,7 @@ using Swashbuckle.AspNetCore.SwaggerGen;
 using System.IO;
 using System.Reflection;
 
-namespace Ship.Ses.Transmitter.WebApi.Installers
+namespace Ship.Ses.Ingestor.WebApi.Installers
 {
     public static class SwaggerInstaller
     {
