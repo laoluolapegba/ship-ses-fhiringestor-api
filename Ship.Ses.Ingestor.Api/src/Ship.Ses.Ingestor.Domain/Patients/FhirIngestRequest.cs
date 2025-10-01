@@ -21,7 +21,7 @@ namespace Ship.Ses.Ingestor.Domain.Patients
         /// </summary>
         [SwaggerSchema("The FHIR service endpoint to which the resource belongs.", Nullable = false)]
         [Required(ErrorMessage = "SHIP Service is required.")]
-        public string ShipService { get; set; }
+        public required string ShipService { get; set; }
         /// <summary>
         /// The client-assigned resource ID (optional)
         /// </summary>
@@ -35,7 +35,7 @@ namespace Ship.Ses.Ingestor.Domain.Patients
         [SwaggerSchema("FHIR-compliant resource body as JSON.")]
         [Required(ErrorMessage = "FhirJson is required.")]
         [DataType(DataType.MultilineText)]
-        public JsonObject FhirJson { get; set; }
+        public required JsonObject FhirJson { get; set; }
 
         /// <summary>
         /// Optional metadata or source system indicator
@@ -49,7 +49,7 @@ namespace Ship.Ses.Ingestor.Domain.Patients
 
         [SwaggerSchema("Optional correlation ID for tracing the request.")]
         [Required(ErrorMessage = "CorrelationId is required")]
-        public string CorrelationId { get; set; }
+        public required string CorrelationId { get; set; }
 
     }
 }
