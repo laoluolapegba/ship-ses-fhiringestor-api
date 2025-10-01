@@ -4,7 +4,6 @@ using MongoDB.Bson;
 using MongoDB.Driver;
 using Ship.Ses.Transmitter.Application.Interfaces;
 using Ship.Ses.Transmitter.Application.Sync;
-using Ship.Ses.Transmitter.Domain.Encounter;
 using Ship.Ses.Transmitter.Domain.Patients;
 using Ship.Ses.Transmitter.Domain.Sync;
 using Ship.Ses.Transmitter.Infrastructure.Settings;
@@ -33,9 +32,8 @@ namespace Ship.Ses.Transmitter.Worker
 
             _resourceMap = new Dictionary<string, Type>(StringComparer.OrdinalIgnoreCase)
             {
-                { "Patient", typeof(PatientSyncRecord) },
-                { "Encounter", typeof(EncounterSyncRecord) }
-                // Add new resource mappings here
+                { "Patient", typeof(PatientSyncRecord) }
+                // Non-patient resources fall back to GenericResourceSyncRecord
             };
         }
 
@@ -70,7 +68,10 @@ namespace Ship.Ses.Transmitter.Worker
 
             foreach (var resource in enabledResources)
             {
-                if (!_resourceMap.TryGetValue(resource, out var modelType)) continue;
+                if (!_resourceMap.TryGetValue(resource, out var modelType))
+                {
+                    modelType = typeof(GenericResourceSyncRecord);
+                }
 
                 var instance = (FhirSyncRecord)Activator.CreateInstance(modelType);
                 var collection = _mongoDatabase.GetCollection<BsonDocument>(instance.CollectionName);
@@ -116,7 +117,10 @@ namespace Ship.Ses.Transmitter.Worker
 
             foreach (var resource in enabledResources)
             {
-                if (!_resourceMap.TryGetValue(resource, out var modelType)) continue;
+                if (!_resourceMap.TryGetValue(resource, out var modelType))
+                {
+                    modelType = typeof(GenericResourceSyncRecord);
+                }
 
                 var instance = (FhirSyncRecord)Activator.CreateInstance(modelType);
                 var collection = _mongoDatabase.GetCollection<BsonDocument>(instance.CollectionName);

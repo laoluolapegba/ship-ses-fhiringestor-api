@@ -15,7 +15,7 @@ namespace Ship.Ses.Transmitter.Infrastructure.Persistance.Configuration.Domain
     public sealed class StatusEventRepository : IStatusEventRepository
     {
         private readonly IMongoCollection<StatusEvent> _col;
-        public StatusEventRepository(IMongoDatabase db) => _col = db.GetCollection<StatusEvent>("patientstatusevents");
+        public StatusEventRepository(IMongoDatabase db) => _col = db.GetCollection<StatusEvent>("fhirstatusevents");
         private readonly IMongoDatabase _database;
 
         /// <summary>
@@ -30,9 +30,9 @@ namespace Ship.Ses.Transmitter.Infrastructure.Persistance.Configuration.Domain
                 throw new ArgumentException("SourceDbSettings or DatabaseName is not configured for MongoSyncRepository.", nameof(settings));
             }
             _database = client.GetDatabase(settings.Value.DatabaseName);
-            _col = _database.GetCollection<StatusEvent>("patientstatusevents");
+            _col = _database.GetCollection<StatusEvent>("fhirstatusevents");
         }
-        public async Task<(StatusEvent persisted, bool duplicate, bool conflict)>  UpsertPatientStatusAsync(StatusEvent incoming, CancellationToken ct)
+        public async Task<(StatusEvent persisted, bool duplicate, bool conflict)>  UpsertStatusEventAsync(StatusEvent incoming, CancellationToken ct)
         {
             try
             {
@@ -92,7 +92,7 @@ namespace Ship.Ses.Transmitter.Infrastructure.Persistance.Configuration.Domain
     //    public StatusEventRepository(IMongoClient client, string databaseName)
     //    {
     //        var database = client.GetDatabase(databaseName);
-    //        _statusEvents = database.GetCollection<StatusEvent>("patientstatusevents");
+    //        _statusEvents = database.GetCollection<StatusEvent>("fhirstatusevents");
     //    }
 
     //    public async Task<StatusEvent> FindByTransactionIdAsync(string transactionId)

@@ -7,7 +7,7 @@ namespace Ship.Ses.Transmitter.Domain.SyncModels
 {
     //using Ship.Ses.Transmitter.Domain.Attributes; 
 
-    //[BsonCollectionName("patientstatusevents")]
+    //[BsonCollectionName("fhirstatusevents")]
 
     public sealed class StatusEvent : BaseMongoDocument
     {
@@ -15,7 +15,7 @@ namespace Ship.Ses.Transmitter.Domain.SyncModels
         public string TransactionId { get; set; } = default!;
 
         [BsonElement("resourceType")]
-        public string ResourceType { get; set; } = "Patient"; // inferred from Data.resourceType
+        public string ResourceType { get; set; } = default!; // inferred from Data.resourceType
 
         [BsonElement("resourceId")]
         public string? ResourceId { get; set; }                // inferred from Data.id (if present)
@@ -73,7 +73,7 @@ namespace Ship.Ses.Transmitter.Domain.SyncModels
         public string? ClientId { get; set; }
         [BsonElement("facilityId")]
         public string? FacilityId { get; set; }
-        public override string CollectionName => "patientstatusevents";
+        public override string CollectionName => "fhirstatusevents";
     }
 
 

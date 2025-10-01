@@ -34,11 +34,11 @@ namespace Ship.Ses.Transmitter.Infrastructure.Persistance.Configuration.Domain
         }
 
 
-        public async Task<IdempotentInsertResult<PatientSyncRecord>> TryInsertIdempotentAsync(PatientSyncRecord record)
+        public async Task<IdempotentInsertResult<T>> TryInsertIdempotentAsync<T>(T record) where T : FhirSyncRecord
         {
             if (record is null) throw new ArgumentNullException(nameof(record));
 
-            var col = _database.GetCollection<PatientSyncRecord>(record.CollectionName);
+            var col = _database.GetCollection<T>(record.CollectionName);
 
             try
             {
@@ -70,8 +70,8 @@ namespace Ship.Ses.Transmitter.Infrastructure.Persistance.Configuration.Domain
 
                 // DIFFERENT payload with same correlationId → treat as re-attempt
                 // Persist the new payload & reset processing fields atomically.
-                var filter = Builders<PatientSyncRecord>.Filter.Eq(x => x.Id, existing.Id);
-                var update = Builders<PatientSyncRecord>.Update
+                var filter = Builders<T>.Filter.Eq(x => x.Id, existing.Id);
+                var update = Builders<T>.Update
                     .Set(x => x.FhirJson, record.FhirJson)
                     .Set(x => x.PayloadHash, record.PayloadHash)
                     .Set(x => x.ResourceType, record.ResourceType)
@@ -152,14 +152,25 @@ namespace Ship.Ses.Transmitter.Infrastructure.Persistance.Configuration.Domain
             await collection.BulkWriteAsync(models);
         }
 
-        public async Task<FhirSyncRecord> GetPatientByTransactionIdAsync(string transactionId, CancellationToken cancellationToken)
+        public async Task<FhirSyncRecord?> GetByTransactionIdAsync(string transactionId, CancellationToken cancellationToken)
         {
             if (string.IsNullOrWhiteSpace(transactionId))
                 throw new ArgumentNullException(nameof(transactionId));
-            var collection = _database.GetCollection<PatientSyncRecord>(new PatientSyncRecord().CollectionName);
-            var filter = Builders<PatientSyncRecord>.Filter.Eq(r => r.TransactionId, transactionId);
-            var result = await collection.Find(filter).FirstOrDefaultAsync(cancellationToken);
-            return result;
+
+            var patientCollection = _database.GetCollection<PatientSyncRecord>(new PatientSyncRecord().CollectionName);
+            var patientFilter = Builders<PatientSyncRecord>.Filter.Eq(r => r.TransactionId, transactionId);
+            var patientResult = await patientCollection.Find(patientFilter).FirstOrDefaultAsync(cancellationToken);
+
+            if (patientResult is not null)
+            {
+                return patientResult;
+            }
+
+            var resourceCollection = _database.GetCollection<GenericResourceSyncRecord>(new GenericResourceSyncRecord().CollectionName);
+            var resourceFilter = Builders<GenericResourceSyncRecord>.Filter.Eq(r => r.TransactionId, transactionId);
+            var resourceResult = await resourceCollection.Find(resourceFilter).FirstOrDefaultAsync(cancellationToken);
+
+            return resourceResult;
         }
     }
    
