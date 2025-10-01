@@ -7,7 +7,6 @@ using Ship.Ses.Ingestor.Infrastructure.Settings;
 using Ship.Ses.Ingestor.Application.Patients;
 using System;
 using System.Collections.Generic;
-using System.Linq;
 using System.Text;
 using System.Text.Json;
 using System.Threading.Tasks;
@@ -35,18 +34,26 @@ namespace Ship.Ses.Ingestor.Infrastructure.Persistance
             if (string.IsNullOrWhiteSpace(clientId)) throw new ArgumentException("Client ID cannot be null or empty.", nameof(clientId));
             if (string.IsNullOrWhiteSpace(request.CorrelationId)) throw new ArgumentException("CorrelationId is required.", nameof(request));
             if (string.IsNullOrWhiteSpace(request.FacilityId)) throw new ArgumentException("FacilityId is required.", nameof(request));
+            if (string.IsNullOrWhiteSpace(request.ShipService)) throw new ArgumentException("ShipService is required.", nameof(request));
             //if (string.IsNullOrWhiteSpace(request.ResourceType)) throw new ArgumentException("ResourceType is required.", nameof(request));
+
+            var normalizedResourceType = request.TryGetNormalizedResourceType();
+
+            if (string.IsNullOrWhiteSpace(normalizedResourceType))
+            {
+                throw new ArgumentException("FHIR payload must include a non-empty 'resourceType'.", nameof(request));
+            }
 
             var canonical = request.FhirJson.ToJsonString(new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase });
             var bson = BsonDocument.Parse(canonical);
 
-            var normalizedResourceType = request.ResourceType.Trim();
             FhirSyncRecord record = string.Equals(normalizedResourceType, "Patient", StringComparison.OrdinalIgnoreCase)
                 ? new PatientSyncRecord()
                 : new GenericResourceSyncRecord();
 
             record.ClientId = clientId;
             record.FacilityId = request.FacilityId;
+            record.ShipService = request.ShipService;
             record.CorrelationId = request.CorrelationId;
             record.ResourceType = normalizedResourceType;
             record.ResourceId = request.ResourceId;

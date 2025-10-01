@@ -56,6 +56,9 @@ namespace Ship.Ses.Ingestor.Domain.Patients
         public string ApiResponsePayload { get; set; }  // Raw JSON response from FHIR API
         [BsonElement("facilityId")]
         public string FacilityId { get; set; }
+
+        [BsonElement("shipService")]
+        public string ShipService { get; set; } = default!;
         // Derived classes must override collection name
         public abstract string CollectionName { get; }
         [BsonElement("stagingId")]
