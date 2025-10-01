@@ -78,6 +78,14 @@ namespace Ship.Ses.Transmitter.WebApi.Controllers.v1
             //    return Problem(title: "Bad request", detail: "Missing required field: ResourceType.",
             //                   statusCode: StatusCodes.Status400BadRequest);
 
+            var resourceType = request.TryGetNormalizedResourceType();
+            if (string.IsNullOrWhiteSpace(resourceType))
+            {
+                return Problem(title: "Bad request", detail: "FHIR payload must include a non-empty 'resourceType'.",
+                               statusCode: StatusCodes.Status400BadRequest,
+                               extensions: new Dictionary<string, object?> { ["correlationId"] = request.CorrelationId });
+            }
+
             var resourceId = TryGetResourceId(request);
 
             using var _ = _logger.BeginScope(new Dictionary<string, object?>
@@ -86,13 +94,14 @@ namespace Ship.Ses.Transmitter.WebApi.Controllers.v1
                 ["ClientId"] = SafeMessageHelper.Sanitize(rawClientId),
                 ["FacilityId"] = SafeMessageHelper.Sanitize(request.FacilityId),
                 ["ShipService"] = SafeMessageHelper.Sanitize(request.ShipService),
-                //["ResourceType"] = SafeMessageHelper.Sanitize(resourceType),
+                ["ResourceType"] = SafeMessageHelper.Sanitize(resourceType),
                 ["ResourceId"] = SafeMessageHelper.Sanitize(resourceId ?? "(none)")
             });
 
             try
             {
                 var result = await _ingestService.IngestAsyncReturningExisting(request, rawClientId);
+                var persistedResourceType = result.Document?.ResourceType ?? resourceType;
 
                 switch (result.Outcome)
                 {
@@ -118,7 +127,7 @@ namespace Ship.Ses.Transmitter.WebApi.Controllers.v1
                 var payload = new FhirIngestAcceptedResponse
                 {
                     Status = "accepted",
-                    //ResourceType = resourceType,
+                    ResourceType = persistedResourceType,
                     ResourceId = resourceId,
                     CorrelationId = request.CorrelationId,
                     Timestamp = DateTime.UtcNow

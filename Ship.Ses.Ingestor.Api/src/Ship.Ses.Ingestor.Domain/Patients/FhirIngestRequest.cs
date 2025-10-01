@@ -51,5 +51,26 @@ namespace Ship.Ses.Ingestor.Domain.Patients
         [Required(ErrorMessage = "CorrelationId is required")]
         public required string CorrelationId { get; set; }
 
+        public string? TryGetNormalizedResourceType()
+        {
+            foreach (var kvp in FhirJson)
+            {
+                if (!string.Equals(kvp.Key, "resourceType", StringComparison.OrdinalIgnoreCase))
+                {
+                    continue;
+                }
+
+                if (kvp.Value is JsonValue value && value.TryGetValue<string>(out var raw))
+                {
+                    var normalized = raw?.Trim();
+                    return string.IsNullOrWhiteSpace(normalized) ? null : normalized;
+                }
+
+                return null;
+            }
+
+            return null;
+        }
+
     }
 }
