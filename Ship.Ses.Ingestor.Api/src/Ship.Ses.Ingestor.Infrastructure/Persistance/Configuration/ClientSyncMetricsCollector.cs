@@ -3,6 +3,7 @@ using Microsoft.Extensions.Options;
 using MongoDB.Bson;
 using MongoDB.Driver;
 using Ship.Ses.Ingestor.Application.Interfaces;
+using Ship.Ses.Ingestor.Domain;
 using Ship.Ses.Ingestor.Domain.Patients;
 using Ship.Ses.Ingestor.Domain.Sync;
 using System;

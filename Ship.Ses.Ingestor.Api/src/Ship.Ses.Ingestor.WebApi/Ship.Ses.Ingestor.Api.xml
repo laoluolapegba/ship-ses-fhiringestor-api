@@ -4,7 +4,7 @@
         <name>Ship.Ses.Ingestor.Api</name>
     </assembly>
     <members>
-        <member name="T:Ship.Ses.Transmitter.WebApi.Controllers.v1.FhirIngestController">
+        <member name="T:Ship.Ses.Ingestor.WebApi.Controllers.v1.FhirIngestController">
             <summary>
             Allows EMRs to submit FHIR-compliant resources into the SHIP SES platform.
             </summary>

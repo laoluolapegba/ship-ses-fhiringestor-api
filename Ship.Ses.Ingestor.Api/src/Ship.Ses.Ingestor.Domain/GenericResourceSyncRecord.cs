@@ -1,4 +1,6 @@
-namespace Ship.Ses.Ingestor.Domain.Patients
+using Ship.Ses.Ingestor.Domain.Patients;
+
+namespace Ship.Ses.Ingestor.Domain
 {
     public class GenericResourceSyncRecord : FhirSyncRecord
     {

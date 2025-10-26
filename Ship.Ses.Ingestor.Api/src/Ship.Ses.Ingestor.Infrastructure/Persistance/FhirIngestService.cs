@@ -10,6 +10,7 @@ using System.Collections.Generic;
 using System.Text;
 using System.Text.Json;
 using System.Threading.Tasks;
+using Ship.Ses.Ingestor.Domain;
 
 namespace Ship.Ses.Ingestor.Infrastructure.Persistance
 {

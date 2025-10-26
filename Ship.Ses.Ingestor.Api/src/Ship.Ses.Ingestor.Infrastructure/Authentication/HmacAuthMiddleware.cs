@@ -114,7 +114,7 @@ namespace Ship.Ses.Ingestor.Infrastructure.Authentication
             if (!string.Equals(kid, configuredKid, StringComparison.Ordinal))
             {
                 if (dbg) _logger.LogDebug("HMAC: kid mismatch: received={Kid} expected={ConfiguredKid}", kid, configuredKid);
-                await WriteProblem(ctx, 401, "Unauthorized", "kid does not match configured client.");
+                await WriteProblem(ctx, 401, "Unauthorized", $"kid does not match configured");
                 return;
             }
 

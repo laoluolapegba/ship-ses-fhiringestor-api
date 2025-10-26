@@ -73,6 +73,19 @@ namespace Ship.Ses.Ingestor.Domain.SyncModels
         public string? ClientId { get; set; }
         [BsonElement("facilityId")]
         public string? FacilityId { get; set; }
+        [BsonElement("shipService")]
+        public string? ShipService { get; set; }
+        [BsonElement("probeStatus")]
+        public string? ProbeStatus { get; set; } = "Pending"; // Pending|InFlight|Succeeded|Abandoned
+
+        [BsonElement("probeAttempts")]
+        public int ProbeAttempts { get; set; }
+
+        [BsonElement("probeNextAttemptAt")]
+        public DateTime? ProbeNextAttemptAt { get; set; } = DateTime.UtcNow;
+
+        [BsonElement("probeLastError")]
+        public string? ProbeLastError { get; set; }
         public override string CollectionName => "fhirstatusevents";
     }
 

@@ -128,6 +128,13 @@ namespace Ship.Ses.Ingestor.Infrastructure.ReadServices
             //    await _repository.BulkUpdateStatusAsync<T>(objectIds, "Failed");
             //}
         }
+
+        public Task<FhirSyncRecord?> GetFailedRecordByTransactionIdAsync(string transactionId, CancellationToken ct)
+            => _repository.GetFailedByTransactionIdAsync(transactionId, ct);
+
+        public Task<FhirSyncRecord?> GetFailedRecordByCorrelationIdAsync(string correlationId, CancellationToken ct)
+            => _repository.GetFailedByCorrelationIdAsync(correlationId, ct);
+
         //public async Task ProcessPendingRecordsAsync<T>(CancellationToken cancellationToken) where T : FhirSyncRecord
         //{
         //    _logger.LogInformation($"Getting pending records ...");

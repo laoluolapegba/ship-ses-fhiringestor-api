@@ -145,7 +145,7 @@ namespace Ship.Ses.Ingestor.Application.Services
 
         public Task<StatusEvent?> GetByTransactionIdAsync(string transactionId, CancellationToken ct = default) =>
             _repository.GetByTransactionIdAsync(transactionId, ct);
-
+         
         public Task<StatusEvent?> GetByCorrelationIdAsync(string correlationId, CancellationToken ct = default) =>
             _repository.GetByCorrelationIdAsync(correlationId, ct);
 

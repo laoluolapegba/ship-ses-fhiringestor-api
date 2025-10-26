@@ -3,10 +3,11 @@ using MongoDB.Bson;
 using Ship.Ses.Ingestor.Application.DTOs;
 using Ship.Ses.Ingestor.Application.DTOs;
 using Ship.Ses.Ingestor.Application.Interfaces;
+using Ship.Ses.Ingestor.Application.Interfaces;
+using Ship.Ses.Ingestor.Domain.Patients;
 using Ship.Ses.Ingestor.Domain.SyncModels;
 using Swashbuckle.AspNetCore.Annotations;
 using System.Net;
-using Ship.Ses.Ingestor.Application.Interfaces;
 
 namespace Ship.Ses.Ingestor.Api.Controllers.v1
 {
@@ -20,11 +21,14 @@ namespace Ship.Ses.Ingestor.Api.Controllers.v1
     {
         private readonly IStatusCallbackService _statusCallbackService;
         private readonly ILogger<ShipCallbackController> _logger;
+        private readonly IFhirSyncService _fhirSyncStatusService;
+
         //https://myfacility.health.ng/ship/fhir/ack
-        public ShipCallbackController(IStatusCallbackService statusCallbackService, ILogger<ShipCallbackController> logger)
+        public ShipCallbackController(IStatusCallbackService statusCallbackService, ILogger<ShipCallbackController> logger, IFhirSyncService fhirSyncStatusService)
         {
             _statusCallbackService = statusCallbackService;
             _logger = logger;
+            _fhirSyncStatusService = fhirSyncStatusService;
         }
 
         [HttpPost("patient/ack")]
@@ -144,10 +148,38 @@ namespace Ship.Ses.Ingestor.Api.Controllers.v1
                     response.Data = System.Text.Json.Nodes.JsonNode.Parse(json)?.AsObject();
                 }
 
+                FhirSyncRecord? failedRecord = hasTx
+            ? await _fhirSyncStatusService.GetFailedRecordByTransactionIdAsync(transactionId!, ct)
+            : await _fhirSyncStatusService.GetFailedRecordByCorrelationIdAsync(correlationId!, ct);
+
+
+
+                if (failedRecord is not null)
+                {
+                    //overwrite outward-facing status/message so the EMR sees why it failed.
+                    response.Status = "FAILED"; // outward-facing normalised state
+                    response.Message = !string.IsNullOrWhiteSpace(failedRecord.ErrorMessage)
+                        ? failedRecord.ErrorMessage
+                        : response.Message; // fallback to whatever evt.Message had
+
+                    if (includeData && failedRecord.FhirJson is not null)
+                    {
+                        var failedJson = failedRecord.FhirJson.ToJson(new MongoDB.Bson.IO.JsonWriterSettings
+                        {
+                            OutputMode = MongoDB.Bson.IO.JsonOutputMode.CanonicalExtendedJson
+                        });
+
+                        response.Data = System.Text.Json.Nodes.JsonNode
+                            .Parse(failedJson)?
+                            .AsObject();
+                    }
+                }
+
                 return Ok(response);
             }
             catch (Exception ex)
             {
+                _logger.LogError(ex, "An unexpected error occurred while retrieving statusevent transactionId:{TransactionId} correlationId:{CorrelationId}", transactionId, correlationId);
                 return StatusCode(500, $"An unexpected error occurred: {ex.Message}");
             }
         }

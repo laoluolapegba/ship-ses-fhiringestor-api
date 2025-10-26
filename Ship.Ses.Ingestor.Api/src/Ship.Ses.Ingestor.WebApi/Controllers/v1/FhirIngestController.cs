@@ -14,7 +14,7 @@ using System.Security.AccessControl;
 using System.Security.Claims;
 using System.Text;
 using System.Text.Json;
-namespace Ship.Ses.Transmitter.WebApi.Controllers.v1
+namespace Ship.Ses.Ingestor.WebApi.Controllers.v1
 {
 
     /// <summary>

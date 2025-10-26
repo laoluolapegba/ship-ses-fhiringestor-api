@@ -19,5 +19,9 @@ namespace Ship.Ses.Ingestor.Domain.Patients
     Dictionary<ObjectId, (string status, string message, string transactionId, string rawResponse)> updates
 ) where T : FhirSyncRecord, new();
         Task<FhirSyncRecord?> GetByTransactionIdAsync(string transactionId, CancellationToken cancellationToken);
+
+        Task<FhirSyncRecord?> GetFailedByTransactionIdAsync(string transactionId, CancellationToken cancellationToken);
+        Task<FhirSyncRecord?> GetFailedByCorrelationIdAsync(string correlationId, CancellationToken cancellationToken);
+
     }
 }

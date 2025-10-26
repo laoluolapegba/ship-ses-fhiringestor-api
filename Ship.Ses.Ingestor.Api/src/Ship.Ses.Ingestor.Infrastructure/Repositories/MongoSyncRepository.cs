@@ -1,6 +1,7 @@
 ﻿using Microsoft.Extensions.Options;
 using MongoDB.Bson;
 using MongoDB.Driver;
+using Ship.Ses.Ingestor.Domain;
 using Ship.Ses.Ingestor.Domain.Patients;
 using Ship.Ses.Ingestor.Infrastructure.Settings;
 using System;
@@ -172,6 +173,82 @@ namespace Ship.Ses.Ingestor.Infrastructure.Repositories
 
             return resourceResult;
         }
+        public async Task<FhirSyncRecord?> GetFailedByTransactionIdAsync(
+    string transactionId,
+    CancellationToken cancellationToken)
+        {
+            if (string.IsNullOrWhiteSpace(transactionId))
+                throw new ArgumentNullException(nameof(transactionId));
+
+            // Try patient collection
+            var patientCollection = _database.GetCollection<PatientSyncRecord>(new PatientSyncRecord().CollectionName);
+
+            // we consider "failed" anything that has an ErrorMessage OR a non-success terminal status
+            var patientFilter = Builders<PatientSyncRecord>.Filter.And(
+                Builders<PatientSyncRecord>.Filter.Eq(r => r.TransactionId, transactionId),
+                Builders<PatientSyncRecord>.Filter.Ne(r => r.ErrorMessage, null) // means validation or processing failure captured
+            );
+
+            var patientResult = await patientCollection
+                .Find(patientFilter)
+                .FirstOrDefaultAsync(cancellationToken);
+
+            if (patientResult is not null)
+                return patientResult;
+
+            // Try generic resource collection
+            var resourceCollection = _database.GetCollection<GenericResourceSyncRecord>(new GenericResourceSyncRecord().CollectionName);
+
+            var resourceFilter = Builders<GenericResourceSyncRecord>.Filter.And(
+                Builders<GenericResourceSyncRecord>.Filter.Eq(r => r.TransactionId, transactionId),
+                Builders<GenericResourceSyncRecord>.Filter.Ne(r => r.ErrorMessage, null)
+            );
+
+            var resourceResult = await resourceCollection
+                .Find(resourceFilter)
+                .FirstOrDefaultAsync(cancellationToken);
+
+            return resourceResult;
+        }
+
+
+        public async Task<FhirSyncRecord?> GetFailedByCorrelationIdAsync(
+            string correlationId,
+            CancellationToken cancellationToken)
+        {
+            if (string.IsNullOrWhiteSpace(correlationId))
+                throw new ArgumentNullException(nameof(correlationId));
+
+            // Try patient collection
+            var patientCollection = _database.GetCollection<PatientSyncRecord>(new PatientSyncRecord().CollectionName);
+
+            var patientFilter = Builders<PatientSyncRecord>.Filter.And(
+                Builders<PatientSyncRecord>.Filter.Eq(r => r.CorrelationId, correlationId),
+                Builders<PatientSyncRecord>.Filter.Ne(r => r.ErrorMessage, null)
+            );
+
+            var patientResult = await patientCollection
+                .Find(patientFilter)
+                .FirstOrDefaultAsync(cancellationToken);
+
+            if (patientResult is not null)
+                return patientResult;
+
+            //  Try generic resource collection
+            var resourceCollection = _database.GetCollection<GenericResourceSyncRecord>(new GenericResourceSyncRecord().CollectionName);
+
+            var resourceFilter = Builders<GenericResourceSyncRecord>.Filter.And(
+                Builders<GenericResourceSyncRecord>.Filter.Eq(r => r.CorrelationId, correlationId),
+                Builders<GenericResourceSyncRecord>.Filter.Ne(r => r.ErrorMessage, null)
+            );
+
+            var resourceResult = await resourceCollection
+                .Find(resourceFilter)
+                .FirstOrDefaultAsync(cancellationToken);
+
+            return resourceResult;
+        }
+
     }
-   
+
 }

@@ -4,8 +4,6 @@ using Ship.Ses.Ingestor.Domain.Patients;
 using System.Text.Json.Nodes;
 using Swashbuckle.AspNetCore.Filters;
 using Ship.Ses.Ingestor.Domain.Patients;
-//using Swashbuckle.AspNetCore.Examples;
-//using Swashbuckle.Examples;
 
 namespace Ship.Ses.Ingestor.WebApi.Filters
 {
@@ -15,7 +13,7 @@ namespace Ship.Ses.Ingestor.WebApi.Filters
         {
             return new FhirIngestRequest
             {
-                ResourceType = "Patient",
+                ShipService = "PDS",
                 ResourceId = "123",
                 FhirJson = JsonNode.Parse(@"{
               ""resourceType"": ""Patient"",
@@ -23,7 +21,11 @@ namespace Ship.Ses.Ingestor.WebApi.Filters
               ""name"": [{ ""use"": ""official"", ""family"": ""Doe"", ""given"": [""Jane""] }],
               ""gender"": ""female"",
               ""birthDate"": ""1990-05-10""
-            }")!.AsObject()
+            }")!.AsObject(),
+                FacilityId = "EMR001",
+                CallbackUrl = "https://emr.example.com/callback",
+                CorrelationId = "corr-456"
+
             };
         }
     }
