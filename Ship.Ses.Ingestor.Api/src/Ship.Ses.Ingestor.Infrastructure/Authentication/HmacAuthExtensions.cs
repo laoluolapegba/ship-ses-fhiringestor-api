@@ -3,12 +3,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 using Ship.Ses.Ingestor.Infrastructure.Settings;
-using Ship.Ses.Ingestor.Infrastructure.Settings;
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
+
 
 namespace Ship.Ses.Ingestor.Infrastructure.Authentication
 {

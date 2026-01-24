@@ -56,12 +56,13 @@ namespace Ship.Ses.Ingestor.Infrastructure.Installers
                 return client.GetDatabase(settings.DatabaseName);
             });
 
-            //  Register Repositories & Services
+            //Register Repositories & Services
             services.AddScoped<IMongoSyncRepository, MongoSyncRepository>();
             services.AddScoped<IFhirSyncService, FhirSyncService>();
+            
 
             //services.AddScoped<ISyncMetricsCollector, ClientSyncMetricsCollector>();
-           // services.AddScoped<ISyncMetricsWriter, MySqlSyncMetricsWriter>();
+            // services.AddScoped<ISyncMetricsWriter, MySqlSyncMetricsWriter>();
             var appSettings = configuration.GetSection(nameof(AppSettings)).Get<AppSettings>();
 
             if (appSettings != null)
@@ -164,7 +165,7 @@ namespace Ship.Ses.Ingestor.Infrastructure.Installers
             .AddPolicyHandler(GetRetryPolicy())
             .AddPolicyHandler(GetCircuitBreakerPolicy());
 
-            services.AddScoped<IFhirApiService, FhirApiService>();
+            //services.AddScoped<IFhirApiService, FhirApiService>();
 
             return services;
         }

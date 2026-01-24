@@ -13,25 +13,47 @@ namespace Ship.Ses.Ingestor.Application.DTOs
     }
     public class PatientTransmissionStatusRequest
     {
+        public PatientTransmissionStatusRequest(string status, string message, string transactionId)
+        {
+            Status = status;
+            Message = message;
+            TransactionId = transactionId;
+        }
+
         [Required]
         [RegularExpression("^(SUCCESS|FAILED|PENDING)$")]
-        public string Status { get; set; } = default!;
+        public string Status { get; set; }
 
         [Required, StringLength(2000, MinimumLength = 1)]
-        public string Message { get; set; } = default!;
-
-        //[RegularExpression(@"^SHIP[0-9]{10,}$")]
-        public string ShipId { get; set; } = default!;
+        public string Message { get; set; }
 
         [Required, MinLength(1)]
-        public string TransactionId { get; set; } = default!;
+        public string TransactionId { get; set; }
+        public string? ShipId { get; set; }
 
-        //[Required]
-        //public System.Text.Json.Nodes.JsonObject Data { get; set; };
-
-        // Optional client-sent time (server falls back to UtcNow)
         public DateTimeOffset? Timestamp { get; set; }
     }
+    //public class PatientTransmissionStatusRequest
+    //{
+    //    [Required]
+    //    [RegularExpression("^(SUCCESS|FAILED|PENDING)$")]
+    //    public string Status { get; set; } = default!;
+
+    //    [Required, StringLength(2000, MinimumLength = 1)]
+    //    public string Message { get; set; } = default!;
+
+    //    [RegularExpression(@"^SHIP[0-9]{10,}$")]
+    //    public string? ShipId { get; set; } = default!;
+
+    //    [Required, MinLength(1)]
+    //    public string TransactionId { get; set; } = default!;
+
+    //    [Required]
+    //    public System.Text.Json.Nodes.JsonObject Data { get; set; };
+
+    //    Optional client-sent time(server falls back to UtcNow)
+    //    public DateTimeOffset? Timestamp { get; set; }
+    //}
     public enum StatusEnum
     {
         SUCCESS,

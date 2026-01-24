@@ -12,8 +12,8 @@ namespace Ship.Ses.Ingestor.Application.Interfaces
     {
         //Task ProcessPendingRecordsAsync(FhirResourceType resourceType, CancellationToken cancellationToken);
         //Task ProcessPendingRecordsAsync<T>(CancellationToken token) where T : FhirSyncRecord, new();
-        Task<SyncResultDto> ProcessPendingRecordsAsync<T>(CancellationToken token) 
-    where T : FhirSyncRecord, new();
+       // Task<SyncResultDto> ProcessPendingRecordsAsync<T>(CancellationToken token) 
+   // where T : FhirSyncRecord, new();
         Task<FhirSyncRecord?> GetFailedRecordByTransactionIdAsync(string transactionId, CancellationToken ct);
         Task<FhirSyncRecord?> GetFailedRecordByCorrelationIdAsync(string correlationId, CancellationToken ct);
 

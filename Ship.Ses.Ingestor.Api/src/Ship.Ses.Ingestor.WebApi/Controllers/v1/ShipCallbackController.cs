@@ -1,8 +1,6 @@
 ﻿using Microsoft.AspNetCore.Mvc;
 using MongoDB.Bson;
 using Ship.Ses.Ingestor.Application.DTOs;
-using Ship.Ses.Ingestor.Application.DTOs;
-using Ship.Ses.Ingestor.Application.Interfaces;
 using Ship.Ses.Ingestor.Application.Interfaces;
 using Ship.Ses.Ingestor.Domain.Patients;
 using Ship.Ses.Ingestor.Domain.SyncModels;
@@ -116,7 +114,7 @@ namespace Ship.Ses.Ingestor.Api.Controllers.v1
             // XOR: exactly one must be provided
             var hasTx = !string.IsNullOrWhiteSpace(transactionId);
             var hasCorr = !string.IsNullOrWhiteSpace(correlationId);
-            if (hasTx == hasCorr) // both true or both false
+            if (hasTx == hasCorr)
                 return BadRequest("Provide exactly one of 'transactionId' or 'correlationId'.");
 
             try
@@ -127,16 +125,25 @@ namespace Ship.Ses.Ingestor.Api.Controllers.v1
 
                 if (evt is null) return NotFound();
 
+                
                 var response = new PatientTransmissionStatusQueryResponse
                 {
-                    CorrelationId = correlationId,
+                    CorrelationId = hasTx ? evt.CorrelationId : correlationId,
                     TransactionId = evt.TransactionId,
                     ShipId = evt.ShipId,
                     Status = evt.Status,
                     Message = evt.Message,
                     ResourceType = evt.ResourceType,
                     ResourceId = evt.ResourceId,
-                    ReceivedAtUtc = evt.ReceivedAtUtc
+                    ReceivedAtUtc = evt.ReceivedAtUtc,
+
+                    CallbackStatus = evt.CallbackStatus,
+                    CallbackAttempts = evt.CallbackAttempts,
+                    CallbackNextAttemptAt = evt.CallbackNextAttemptAt,
+                    CallbackDeliveredAt = evt.CallbackDeliveredAt,
+                    EmrTargetUrl = evt.EmrTargetUrl,
+                    EmrResponseStatusCode = evt.EmrResponseStatusCode,
+                    EmrResponseBody = evt.EmrResponseBody
                 };
 
                 if (includeData && evt.Data != null)
@@ -148,30 +155,37 @@ namespace Ship.Ses.Ingestor.Api.Controllers.v1
                     response.Data = System.Text.Json.Nodes.JsonNode.Parse(json)?.AsObject();
                 }
 
-                FhirSyncRecord? failedRecord = hasTx
-            ? await _fhirSyncStatusService.GetFailedRecordByTransactionIdAsync(transactionId!, ct)
-            : await _fhirSyncStatusService.GetFailedRecordByCorrelationIdAsync(correlationId!, ct);
+                
+                var needsValidationMessage =
+                    IsValidationOrEarlyFailure(evt) &&
+                    string.IsNullOrWhiteSpace(response.Message);
 
+                var needsRejectedPayload =
+                    IsValidationOrEarlyFailure(evt) &&
+                    includeData &&
+                    response.Data is null;
 
-
-                if (failedRecord is not null)
+                if (needsValidationMessage || needsRejectedPayload)
                 {
-                    //overwrite outward-facing status/message so the EMR sees why it failed.
-                    response.Status = "FAILED"; // outward-facing normalised state
-                    response.Message = !string.IsNullOrWhiteSpace(failedRecord.ErrorMessage)
-                        ? failedRecord.ErrorMessage
-                        : response.Message; // fallback to whatever evt.Message had
+                    FhirSyncRecord? failedRecord = hasTx
+                        ? await _fhirSyncStatusService.GetFailedRecordByTransactionIdAsync(transactionId!, ct)
+                        : await _fhirSyncStatusService.GetFailedRecordByCorrelationIdAsync(correlationId!, ct);
 
-                    if (includeData && failedRecord.FhirJson is not null)
+                    if (failedRecord is not null)
                     {
-                        var failedJson = failedRecord.FhirJson.ToJson(new MongoDB.Bson.IO.JsonWriterSettings
-                        {
-                            OutputMode = MongoDB.Bson.IO.JsonOutputMode.CanonicalExtendedJson
-                        });
+                        // fill message if the DB event doesn't already have it
+                        if (needsValidationMessage && !string.IsNullOrWhiteSpace(failedRecord.ErrorMessage))
+                            response.Message = failedRecord.ErrorMessage;
 
-                        response.Data = System.Text.Json.Nodes.JsonNode
-                            .Parse(failedJson)?
-                            .AsObject();
+                        // fill data if requested and missing
+                        if (needsRejectedPayload && failedRecord.FhirJson is not null)
+                        {
+                            var failedJson = failedRecord.FhirJson.ToJson(new MongoDB.Bson.IO.JsonWriterSettings
+                            {
+                                OutputMode = MongoDB.Bson.IO.JsonOutputMode.CanonicalExtendedJson
+                            });
+                            response.Data = System.Text.Json.Nodes.JsonNode.Parse(failedJson)?.AsObject();
+                        }
                     }
                 }
 
@@ -179,11 +193,20 @@ namespace Ship.Ses.Ingestor.Api.Controllers.v1
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "An unexpected error occurred while retrieving statusevent transactionId:{TransactionId} correlationId:{CorrelationId}", transactionId, correlationId);
+                _logger.LogError(ex,
+                    "Unexpected error retrieving status. transactionId:{TransactionId} correlationId:{CorrelationId}",
+                    transactionId, correlationId);
+
                 return StatusCode(500, $"An unexpected error occurred: {ex.Message}");
             }
         }
 
-
+        static bool IsValidationOrEarlyFailure(StatusEvent evt)
+        {    
+            // examples: "VALIDATION_FAILED", "REJECTED", "FAILED"
+            var s = (evt.Status ?? "").Trim().ToUpperInvariant();
+            return s is "VALIDATION_FAILED" or "REJECTED" or "FAILED";
+        }
     }
+
 }

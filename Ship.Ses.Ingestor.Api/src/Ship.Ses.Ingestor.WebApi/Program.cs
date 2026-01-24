@@ -13,14 +13,17 @@ using Ship.Ses.Ingestor.Application.Patients;
 using Ship.Ses.Ingestor.Application.Services;
 using Ship.Ses.Ingestor.Application.Shared;
 using Ship.Ses.Ingestor.Domain.Patients;
-using Ship.Ses.Ingestor.Infrastructure.Persistance;
-using System.Text.Json;
-using Ship.Ses.Ingestor.Infrastructure.Settings;
-using Ship.Ses.Ingestor.WebApi.Installers;
-using Ship.Ses.Ingestor.Infrastructure.Installers;
 using Ship.Ses.Ingestor.Infrastructure.Authentication;
+using Ship.Ses.Ingestor.Infrastructure.Installers;
+using Ship.Ses.Ingestor.Infrastructure.Persistance;
+using Ship.Ses.Ingestor.Infrastructure.Persistance.Configuration;
+using Ship.Ses.Ingestor.Infrastructure.ReadServices;
 using Ship.Ses.Ingestor.Infrastructure.Repositories;
+using Ship.Ses.Ingestor.Infrastructure.Services;
+using Ship.Ses.Ingestor.Infrastructure.Settings;
 using Ship.Ses.Ingestor.Infrastructure.Shared;
+using Ship.Ses.Ingestor.WebApi.Installers;
+using System.Text.Json;
 //using static Org.BouncyCastle.Math.EC.ECCurve;
 
 
@@ -70,6 +73,8 @@ builder.Services.AddSingleton<IMongoClient>(s =>
     return new MongoClient(settings.ConnectionString); 
 });
 // Register IMongoSyncRepository as a Scoped service
+
+builder.Services.AddScoped<IFhirSyncService, FhirSyncService>();
 builder.Services.AddScoped<IMongoSyncRepository, MongoSyncRepository>();
 builder.Services.AddScoped<IHealthService, HealthService>();
 builder.Services.AddScoped<IStatusEventRepository, StatusEventRepository>();
@@ -82,7 +87,7 @@ var appSettings = builder.Configuration.GetSection(nameof(AppSettings)).Get<AppS
 
 
 //builder.Services.Configure<KestrelServerOptions>(
-//          builder.Configuration.GetSection("Kestrel"));
+ //         builder.Configuration.GetSection("Kestrel"));
 
 
 // Register IFhirIngestService 
@@ -99,7 +104,7 @@ builder.Services.AddApiVersioning(options =>
     options.ApiVersionReader = ApiVersionReader.Combine(
         new QueryStringApiVersionReader("api-version"),
         new HeaderApiVersionReader("X-API-Version"),
-        new UrlSegmentApiVersionReader()); // Enables versioning in URL path (e.g., /v1/resource)
+        new UrlSegmentApiVersionReader()); 
 });
 
 
@@ -174,7 +179,7 @@ else
             var feature = context.Features.Get<Microsoft.AspNetCore.Diagnostics.IExceptionHandlerFeature>();
             var ex = feature?.Error;
 
-            var problem = CreateProblem(context, ex); // helper below
+            var problem = CreateProblem(context, ex);
 
             context.Response.ContentType = "application/problem+json";
             context.Response.StatusCode = problem.Status ?? StatusCodes.Status500InternalServerError;
