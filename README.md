@@ -58,6 +58,33 @@ Example header:
 
 Authorization: Bearer <your-jwt-token>
 
+### HMAC client credential resolution
+
+HMAC validation uses the authenticated caller identity from the JWT, not the ingest request body. The ingestor reads the client identity from `client_id`, falling back to `azp` when `client_id` is absent.
+
+Client-specific HMAC credentials are resolved from the client HMAC credential registry through `IClientHmacCredentialRegistry`. SeS instance configuration must not contain client HMAC `ClientId` or `ClientSecret` values. `appsettings.json` may only hold generic HMAC validation settings such as header names, clock skew, enablement and algorithm policy.
+
+Vault is the authoritative registry for per-client HMAC secrets. The default secret path pattern is:
+
+```text
+secret/ses/clients/{clientId}/hmac
+```
+
+For example, `client_id=emr-a` resolves to `secret/ses/clients/emr-a/hmac`. The Vault secret should expose the HMAC secret in `clientSecret` by default, with optional `isActive`, `isRevoked`, `status`, and `allowedAlgorithms` metadata. Vault connection details are supplied through environment variables, not SeS appsettings:
+
+```text
+VAULT_ADDR=https://vault.example
+VAULT_TOKEN=<vault token>
+VAULT_HMAC_MOUNT=secret
+VAULT_HMAC_KV_VERSION=2
+VAULT_HMAC_PATH_TEMPLATE=ses/clients/{clientId}/hmac
+VAULT_HMAC_SECRET_KEY=clientSecret
+```
+
+`FacilityId` remains required source facility metadata. It is not a security credential, is not used for HMAC credential lookup, and must not be used as a fallback client identity.
+
+Tenant context is implied by the running SeS deployment/environment. The ingestor does not resolve tenant at runtime.
+
 Example Request
 Endpoint: POST /api/v1/fhir/ingest/Patient
 {

@@ -3,7 +3,6 @@ using Microsoft.OpenApi.Models;
 using Ship.Ses.Ingestor.Domain.Patients;
 using System.Text.Json.Nodes;
 using Swashbuckle.AspNetCore.Filters;
-using Ship.Ses.Ingestor.Domain.Patients;
 
 namespace Ship.Ses.Ingestor.WebApi.Filters
 {

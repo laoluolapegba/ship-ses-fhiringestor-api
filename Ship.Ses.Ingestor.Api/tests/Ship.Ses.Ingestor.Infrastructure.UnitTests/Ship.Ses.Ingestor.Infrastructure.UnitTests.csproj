@@ -17,14 +17,16 @@
     <PackageReference Include="Moq" Version="4.20.70" />
   </ItemGroup>
 
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+    <ProjectReference Include="..\..\src\Ship.Ses.Ingestor.Application\Ship.Ses.Ingestor.Application.csproj" />
+    <ProjectReference Include="..\..\src\Ship.Ses.Ingestor.Infrastructure\Ship.Ses.Ingestor.Infrastructure.csproj" />
+  </ItemGroup>
+
 
   <ItemGroup>
     <Using Include="Xunit" />
   </ItemGroup>
 
-
-  <ItemGroup>
-    <Folder Include="Queries\" />
-  </ItemGroup>
 
 </Project>

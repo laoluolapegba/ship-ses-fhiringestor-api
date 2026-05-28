@@ -38,9 +38,9 @@ namespace Ship.Ses.Ingestor.Domain.Patients
         public required JsonObject FhirJson { get; set; }
 
         /// <summary>
-        /// Optional metadata or source system indicator
+        /// Source facility metadata.
         /// </summary>
-        [SwaggerSchema("The client id / SHIP faciltiy ID of the source EMR.")]
+        [SwaggerSchema("The SHIP facility ID of the source EMR.")]
         [Required(ErrorMessage = "FacilityId is required.")]
         public string FacilityId { get; set; }
 

@@ -1,9 +1,10 @@
-﻿using Microsoft.AspNetCore.Builder;
+using Microsoft.AspNetCore.Builder;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Options;
+using Ship.Ses.Ingestor.Application.Interfaces;
 using Ship.Ses.Ingestor.Infrastructure.Settings;
-
 
 namespace Ship.Ses.Ingestor.Infrastructure.Authentication
 {
@@ -13,6 +14,9 @@ namespace Ship.Ses.Ingestor.Infrastructure.Authentication
         {
             services.Configure<HmacAuthSettings>(config.GetSection("AppSettings:Hmac"));
             services.AddMemoryCache();
+            services.AddHttpClient<VaultClientHmacCredentialRegistry>();
+            services.TryAddSingleton<IClientHmacCredentialRegistry>(sp => sp.GetRequiredService<VaultClientHmacCredentialRegistry>());
+            services.TryAddSingleton<IClientCredentialResolver, ClientCredentialResolver>();
             services.AddTransient<HmacAuthMiddleware>();
             return services;
         }
@@ -24,5 +28,4 @@ namespace Ship.Ses.Ingestor.Infrastructure.Authentication
             return app;
         }
     }
-
 }
