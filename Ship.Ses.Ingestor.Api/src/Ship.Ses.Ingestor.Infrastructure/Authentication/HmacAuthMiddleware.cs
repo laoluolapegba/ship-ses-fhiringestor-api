@@ -38,6 +38,12 @@ namespace Ship.Ses.Ingestor.Infrastructure.Authentication
                 return;
             }
 
+            if (IsBypassedPath(ctx.Request.Path))
+            {
+                await next(ctx);
+                return;
+            }
+
             var ingestMetadata = await ReadIngestMetadataAsync(ctx.Request, ctx.RequestAborted);
             var rawClientId = ctx.User.FindFirst("client_id")?.Value ?? ctx.User.FindFirst("azp")?.Value;
             var corrId = !string.IsNullOrWhiteSpace(ingestMetadata.CorrelationId)
@@ -192,6 +198,20 @@ namespace Ship.Ses.Ingestor.Infrastructure.Authentication
 
             _logger.LogDebug("HMAC signature verified for client {ClientId}.", credential.ClientId);
             await next(ctx);
+        }
+
+        private bool IsBypassedPath(PathString path)
+        {
+            foreach (var bypass in _opt.BypassPaths)
+            {
+                if (!string.IsNullOrWhiteSpace(bypass) &&
+                    path.StartsWithSegments(bypass, StringComparison.OrdinalIgnoreCase))
+                {
+                    return true;
+                }
+            }
+
+            return false;
         }
 
         private static async Task<IngestMetadata> ReadIngestMetadataAsync(HttpRequest request, CancellationToken cancellationToken)

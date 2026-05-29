@@ -1,5 +1,4 @@
 using Microsoft.Extensions.Logging;
-using Ship.Ses.Ingestor.Application.Interfaces;
 using Ship.Ses.Ingestor.Application.Models;
 using System.Net;
 using System.Net.Http.Json;
@@ -7,23 +6,75 @@ using System.Text.Json;
 
 namespace Ship.Ses.Ingestor.Infrastructure.Authentication
 {
-    public sealed class VaultClientHmacCredentialRegistry : IClientHmacCredentialRegistry
+    /// <summary>
+    /// Reads per-client HMAC credentials from Vault at application startup.
+    /// Vault is the sole source of truth: the set of registered clients is discovered
+    /// by listing the configured prefix, and each client's secret is fetched once.
+    /// There are no per-request Vault calls; adding or rotating a client requires a restart.
+    /// </summary>
+    public sealed class VaultClientHmacCredentialLoader
     {
         private const string DefaultMount = "secret";
-        private const string DefaultPathTemplate = "ses/clients/{clientId}/hmac";
+        private const string DefaultPathTemplate = "emr-clients/{clientId}/hmac";
         private const string DefaultSecretKey = "clientSecret";
         private const string DefaultStatusKey = "status";
         private const string DefaultIsActiveKey = "isActive";
         private const string DefaultIsRevokedKey = "isRevoked";
+        private const string ClientIdPlaceholder = "{clientId}";
         private readonly HttpClient _httpClient;
-        private readonly ILogger<VaultClientHmacCredentialRegistry> _logger;
+        private readonly ILogger<VaultClientHmacCredentialLoader> _logger;
 
-        public VaultClientHmacCredentialRegistry(HttpClient httpClient, ILogger<VaultClientHmacCredentialRegistry> logger)
+        public VaultClientHmacCredentialLoader(HttpClient httpClient, ILogger<VaultClientHmacCredentialLoader> logger)
         {
             _httpClient = httpClient;
             _logger = logger;
         }
 
+        /// <summary>
+        /// Discovers every registered client under the configured Vault prefix and loads each
+        /// client's HMAC credential into an in-memory dictionary keyed by ClientId.
+        /// </summary>
+        public async Task<IReadOnlyDictionary<string, ClientCredential>> LoadAllAsync(CancellationToken cancellationToken)
+        {
+            var result = new Dictionary<string, ClientCredential>(StringComparer.Ordinal);
+
+            var settings = VaultHmacSecretSettings.FromEnvironment();
+            if (!settings.IsConfigured)
+            {
+                _logger.LogWarning("Vault HMAC credential load skipped: VAULT_ADDR and/or VAULT_TOKEN are not set. No clients were loaded, so every signed request will be rejected with 401.");
+                return result;
+            }
+
+            _logger.LogInformation("Vault HMAC load: discovering clients at {VaultAddress} (mount '{Mount}', KV v{KvVersion}, list prefix '{Prefix}'). Token is read from VAULT_TOKEN and never logged.",
+                settings.Address, settings.Mount, settings.KvVersion, BuildListPrefix(settings));
+
+            var clientIds = await ListClientIdsAsync(settings, cancellationToken);
+            if (clientIds.Count == 0)
+            {
+                _logger.LogWarning("Vault HMAC credential load found no registered clients under prefix '{Prefix}'.", BuildListPrefix(settings));
+                return result;
+            }
+
+            foreach (var clientId in clientIds)
+            {
+                var credential = await GetByClientIdAsync(clientId, cancellationToken);
+                if (credential is null)
+                {
+                    _logger.LogWarning("Vault HMAC credential load skipped client {ClientId}: secret could not be read.", clientId);
+                    continue;
+                }
+
+                result[credential.ClientId] = credential;
+            }
+
+            _logger.LogInformation("Vault HMAC credential load complete: {Count} client(s) loaded into memory.", result.Count);
+            return result;
+        }
+
+        /// <summary>
+        /// Reads a single client's HMAC credential from Vault. Used as the per-client fetch
+        /// primitive during the startup load.
+        /// </summary>
         public async Task<ClientCredential?> GetByClientIdAsync(string clientId, CancellationToken cancellationToken)
         {
             if (string.IsNullOrWhiteSpace(clientId))
@@ -47,12 +98,7 @@ namespace Ship.Ses.Ingestor.Infrastructure.Authentication
             HttpResponseMessage response;
             try
             {
-                var baseAddress = settings.Address!.TrimEnd('/') + "/";
-                if (_httpClient.BaseAddress is null || !string.Equals(_httpClient.BaseAddress.ToString(), baseAddress, StringComparison.Ordinal))
-                {
-                    _httpClient.BaseAddress = new Uri(baseAddress, UriKind.Absolute);
-                }
-
+                EnsureBaseAddress(settings);
                 response = await _httpClient.SendAsync(request, cancellationToken);
             }
             catch (Exception ex) when (ex is HttpRequestException || ex is TaskCanceledException)
@@ -112,9 +158,64 @@ namespace Ship.Ses.Ingestor.Infrastructure.Authentication
             }
         }
 
+        private async Task<IReadOnlyList<string>> ListClientIdsAsync(VaultHmacSecretSettings settings, CancellationToken cancellationToken)
+        {
+            var requestPath = BuildListApiPath(settings);
+
+            using var request = new HttpRequestMessage(HttpMethod.Get, $"{requestPath}?list=true");
+            request.Headers.Add("X-Vault-Token", settings.Token);
+
+            HttpResponseMessage response;
+            try
+            {
+                EnsureBaseAddress(settings);
+                response = await _httpClient.SendAsync(request, cancellationToken);
+            }
+            catch (Exception ex) when (ex is HttpRequestException || ex is TaskCanceledException)
+            {
+                _logger.LogWarning(ex, "Vault HMAC client list failed: Vault request failed for prefix '{Prefix}'.", BuildListPrefix(settings));
+                return Array.Empty<string>();
+            }
+
+            using (response)
+            {
+                if (response.StatusCode == HttpStatusCode.NotFound)
+                {
+                    _logger.LogWarning("Vault HMAC client list failed: prefix '{Prefix}' was not found.", BuildListPrefix(settings));
+                    return Array.Empty<string>();
+                }
+
+                if (response.StatusCode is HttpStatusCode.Forbidden or HttpStatusCode.Unauthorized)
+                {
+                    _logger.LogWarning("Vault HMAC client list failed: Vault access denied for prefix '{Prefix}'. The token requires 'list' capability.",
+                        BuildListPrefix(settings));
+                    return Array.Empty<string>();
+                }
+
+                if (!response.IsSuccessStatusCode)
+                {
+                    _logger.LogWarning("Vault HMAC client list failed: Vault returned status {StatusCode} for prefix '{Prefix}'.",
+                        (int)response.StatusCode, BuildListPrefix(settings));
+                    return Array.Empty<string>();
+                }
+
+                var payload = await response.Content.ReadFromJsonAsync<JsonElement>(cancellationToken: cancellationToken);
+                return ReadListKeys(payload);
+            }
+        }
+
+        private void EnsureBaseAddress(VaultHmacSecretSettings settings)
+        {
+            var baseAddress = settings.Address!.TrimEnd('/') + "/";
+            if (_httpClient.BaseAddress is null || !string.Equals(_httpClient.BaseAddress.ToString(), baseAddress, StringComparison.Ordinal))
+            {
+                _httpClient.BaseAddress = new Uri(baseAddress, UriKind.Absolute);
+            }
+        }
+
         private static string BuildLogicalPath(VaultHmacSecretSettings settings, string clientId)
         {
-            var relativePath = settings.PathTemplate!.Replace("{clientId}", Uri.EscapeDataString(clientId), StringComparison.Ordinal);
+            var relativePath = settings.PathTemplate!.Replace(ClientIdPlaceholder, Uri.EscapeDataString(clientId), StringComparison.Ordinal);
             return $"{settings.Mount!.Trim('/')}/{relativePath.Trim('/')}";
         }
 
@@ -126,6 +227,41 @@ namespace Ship.Ses.Ingestor.Infrastructure.Authentication
             return settings.KvVersion == 2
                 ? $"v1/{mount}/data/{relativePath}"
                 : $"v1/{logicalPath}";
+        }
+
+        private static string BuildListApiPath(VaultHmacSecretSettings settings)
+        {
+            var mount = settings.Mount!.Trim('/');
+            var prefix = BuildListPrefix(settings);
+
+            return settings.KvVersion == 2
+                ? $"v1/{mount}/metadata/{prefix}"
+                : $"v1/{mount}/{prefix}";
+        }
+
+        private static string BuildListPrefix(VaultHmacSecretSettings settings)
+        {
+            var template = settings.PathTemplate!;
+            var placeholderIndex = template.IndexOf(ClientIdPlaceholder, StringComparison.Ordinal);
+            var prefix = placeholderIndex >= 0 ? template[..placeholderIndex] : template;
+            return prefix.Trim('/');
+        }
+
+        private static IReadOnlyList<string> ReadListKeys(JsonElement payload)
+        {
+            if (!payload.TryGetProperty("data", out var data) ||
+                data.ValueKind != JsonValueKind.Object ||
+                !data.TryGetProperty("keys", out var keys) ||
+                keys.ValueKind != JsonValueKind.Array)
+            {
+                return Array.Empty<string>();
+            }
+
+            return keys.EnumerateArray()
+                .Where(item => item.ValueKind == JsonValueKind.String)
+                .Select(item => item.GetString()!.TrimEnd('/'))
+                .Where(value => !string.IsNullOrWhiteSpace(value))
+                .ToArray();
         }
 
         private static JsonElement GetSecretData(JsonElement payload, int kvVersion)

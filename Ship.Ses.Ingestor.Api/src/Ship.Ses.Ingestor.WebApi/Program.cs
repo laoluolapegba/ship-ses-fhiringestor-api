@@ -45,12 +45,12 @@ builder.Configuration.AddEnvironmentVariables();
 
 builder.WebHost.ConfigureKestrel(o =>
 {
-    o.AddServerHeader = false; // don’t advertise Kestrel
+    o.AddServerHeader = false;
     o.ConfigureHttpsDefaults(h =>
     {
         h.SslProtocols = System.Security.Authentication.SslProtocols.Tls12
                        | System.Security.Authentication.SslProtocols.Tls13;
-        // h.OnAuthenticate = ctx => { /* optional */ };
+        
     });
 });
 
@@ -210,6 +210,8 @@ else
     app.Logger.LogWarning("⚠️ Could not determine server addresses (no IServerAddressesFeature found).");
 }
 
+app.LogEffectiveConfiguration();
+
 app.Logger.LogInformation("SHIP SeS Ingestor API started and ready to accept requests");
 
 
@@ -270,3 +272,6 @@ static ProblemDetails CreateProblem(HttpContext ctx, Exception? ex)
 
     return problem;
 }
+
+// Exposes the implicit top-level Program class so integration tests can use WebApplicationFactory<Program>.
+public partial class Program { }

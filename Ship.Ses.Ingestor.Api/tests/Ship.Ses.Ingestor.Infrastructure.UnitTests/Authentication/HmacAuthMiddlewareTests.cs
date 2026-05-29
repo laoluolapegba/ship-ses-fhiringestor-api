@@ -237,6 +237,25 @@ namespace Ship.Ses.Ingestor.Infrastructure.UnitTests.Authentication
         }
 
         [Fact]
+        public async Task Health_path_bypasses_hmac_validation()
+        {
+            var ctx = CreateContext(BuildBody("facility-a"), clientId: null);
+            ctx.Request.Method = HttpMethods.Get;
+            ctx.Request.Path = "/health";
+            var middleware = CreateMiddleware(new Dictionary<string, ClientCredential>());
+            var nextCalled = false;
+
+            await middleware.InvokeAsync(ctx, _ =>
+            {
+                nextCalled = true;
+                return Task.CompletedTask;
+            });
+
+            Assert.True(nextCalled);
+            Assert.Equal(StatusCodes.Status200OK, ctx.Response.StatusCode);
+        }
+
+        [Fact]
         public void Hmac_settings_do_not_expose_static_client_credentials()
         {
             var propertyNames = typeof(HmacAuthSettings)

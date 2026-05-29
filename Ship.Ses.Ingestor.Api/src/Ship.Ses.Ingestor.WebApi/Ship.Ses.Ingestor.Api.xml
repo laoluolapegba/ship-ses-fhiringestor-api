@@ -9,6 +9,14 @@
             Allows EMRs to submit FHIR-compliant resources into the SHIP SES platform.
             </summary>
         </member>
+        <member name="T:Ship.Ses.Ingestor.WebApi.Installers.StartupDiagnostics">
+            <summary>
+            Emits a single, redacted summary of the effective runtime configuration at startup, plus a
+            loud error when a misconfiguration would silently reject every request. Intended to give the
+            team deploying this service enough to diagnose a first deployment from the logs alone.
+            No secret values (Vault token, Mongo connection string) are written to the log.
+            </summary>
+        </member>
         <member name="M:Ship.Ses.Ingestor.Api.Helper.SafeMessageHelper.Sanitize(System.String)">
             <summary>
             Sanitizes a string for safe use in logs or user-facing messages by removing control characters like CR, LF, and tabs.

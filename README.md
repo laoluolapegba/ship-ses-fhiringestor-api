@@ -2,6 +2,8 @@
 
 The **FHIR Ingestor API** is a lightweight, secure web API that allows Electronic Medical Record (EMR) systems to submit [FHIR](https://www.hl7.org/fhir/) compliant resources (e.g., `Patient`, `Encounter`) into the SHIP Edge Server (SES). These resources are stored in MongoDB and later processed and synchronized with the central Smart Health Information Platform (SHIP).
 
+> **Deploying this service?** See **[DEPLOYMENT.md](DEPLOYMENT.md)** for the full environment-variable reference, dependency setup (MongoDB / Keycloak / Vault), run examples, startup-log checks, and troubleshooting.
+
 ---
 
 ##  Features
@@ -62,22 +64,22 @@ Authorization: Bearer <your-jwt-token>
 
 HMAC validation uses the authenticated caller identity from the JWT, not the ingest request body. The ingestor reads the client identity from `client_id`, falling back to `azp` when `client_id` is absent.
 
-Client-specific HMAC credentials are resolved from the client HMAC credential registry through `IClientHmacCredentialRegistry`. SeS instance configuration must not contain client HMAC `ClientId` or `ClientSecret` values. `appsettings.json` may only hold generic HMAC validation settings such as header names, clock skew, enablement and algorithm policy.
+Client-specific HMAC credentials are served from the in-memory client HMAC credential registry (`IClientHmacCredentialRegistry`), which is populated once at startup. SeS instance configuration must not contain client HMAC `ClientId` or `ClientSecret` values. `appsettings.json` may only hold generic HMAC validation settings such as header names, clock skew, enablement and algorithm policy.
 
-Vault is the authoritative registry for per-client HMAC secrets. The default secret path pattern is:
+Vault is the authoritative source for per-client HMAC secrets. At application startup, `VaultClientHmacCredentialLoader` lists every registered client under the configured prefix and loads each client's secret into memory. There are no per-request Vault calls; adding or rotating a client requires an application restart to reload. The default secret path pattern is:
 
 ```text
-secret/ses/clients/{clientId}/hmac
+secret/data/emr-clients/{clientId}/hmac
 ```
 
-For example, `client_id=emr-a` resolves to `secret/ses/clients/emr-a/hmac`. The Vault secret should expose the HMAC secret in `clientSecret` by default, with optional `isActive`, `isRevoked`, `status`, and `allowedAlgorithms` metadata. Vault connection details are supplied through environment variables, not SeS appsettings:
+The client set is discovered by listing the prefix (`secret/metadata/emr-clients` for KV v2). For example, `client_id=emr-a` resolves to `secret/data/emr-clients/emr-a/hmac`. The Vault secret should expose the HMAC secret in `clientSecret` by default, with optional `isActive`, `isRevoked`, `status`, and `allowedAlgorithms` metadata. The Vault token requires `read` capability on each client path and `list` capability on the prefix. Vault connection details are supplied through environment variables, not SeS appsettings:
 
 ```text
 VAULT_ADDR=https://vault.example
 VAULT_TOKEN=<vault token>
 VAULT_HMAC_MOUNT=secret
 VAULT_HMAC_KV_VERSION=2
-VAULT_HMAC_PATH_TEMPLATE=ses/clients/{clientId}/hmac
+VAULT_HMAC_PATH_TEMPLATE=emr-clients/{clientId}/hmac
 VAULT_HMAC_SECRET_KEY=clientSecret
 ```
 
