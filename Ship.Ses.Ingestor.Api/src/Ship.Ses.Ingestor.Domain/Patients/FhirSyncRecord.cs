@@ -73,5 +73,19 @@ namespace Ship.Ses.Ingestor.Domain.Patients
         public string ClientId { get; set; } = default!;
         [BsonElement("payloadHash")]
         public string PayloadHash { get; set; } = default!;  // SHA-256 of canonical JSON
+
+        // Downstream target the transmitter dispatches to. Sourced from ShipService at ingest time.
+        // [BsonIgnoreIfNull] keeps legacy docs (and any null values) out of the BSON serialization.
+        [BsonElement("targetSystem")]
+        [BsonIgnoreIfNull]
+        public string? TargetSystem { get; set; }
+
+        // Internal SeS persistence schema version. Legacy docs missing this field deserialize to 1.
+        [BsonElement("schemaVersion")]
+        public int SchemaVersion { get; set; } = 1;
+
+        // FHIR specification version of the payload. Legacy docs missing this field deserialize to "R4".
+        [BsonElement("fhirVersion")]
+        public string FhirVersion { get; set; } = "R4";
     }
 }

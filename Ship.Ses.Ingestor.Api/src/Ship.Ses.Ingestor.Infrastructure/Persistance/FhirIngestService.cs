@@ -69,6 +69,9 @@ namespace Ship.Ses.Ingestor.Infrastructure.Persistance
             record.LastAttemptAt = null;
             record.SyncedResourceId = null;
             record.ClientEMRCallbackUrl = request.CallbackUrl;
+            // TargetSystem mirrors ShipService: the downstream the transmitter will dispatch to.
+            // SchemaVersion (1) and FhirVersion ("R4") use entity defaults — not accepted from the request.
+            record.TargetSystem = request.ShipService;
 
             if (record is PatientSyncRecord patientRecord)
             {
