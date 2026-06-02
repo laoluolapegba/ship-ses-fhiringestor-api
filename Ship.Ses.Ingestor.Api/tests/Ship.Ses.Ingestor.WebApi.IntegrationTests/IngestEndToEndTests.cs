@@ -75,6 +75,182 @@ namespace Ship.Ses.Ingestor.WebApi.IntegrationTests
             Assert.Equal("Patient", persisted["resourceType"].AsString);
         }
 
+        [Fact]
+        public async Task Complex_patient_payload_persists_with_emr_callback_url()
+        {
+            // Fail fast with a clear message if Mongo is unreachable.
+            await AssertMongoIsReachable();
+
+            var correlationId = $"e2e-complex-{Guid.NewGuid():N}";
+            var facilityId = "FAC-LUTH-001";
+            var shipService = "PDS";
+            const string callbackUrl = "http://localhost:3000/api/event";
+
+            // A richer, realistic FHIR R4 Patient: multiple identifiers, names, telecom,
+            // address, marital status, contact, communication, GP/org references and extensions.
+            var body = $$"""
+                {
+                  "shipService": "{{shipService}}",
+                  "resourceId": "patient-9f3c-2025",
+                  "facilityId": "{{facilityId}}",
+                  "correlationId": "{{correlationId}}",
+                  "callbackUrl": "{{callbackUrl}}",
+                  "fhirJson": {
+                    "resourceType": "Patient",
+                    "id": "patient-9f3c-2025",
+                    "meta": {
+                      "versionId": "1",
+                      "lastUpdated": "2025-11-14T09:30:00+01:00",
+                      "source": "emr-luth",
+                      "profile": [ "http://ship.gov.ng/fhir/StructureDefinition/ship-patient" ]
+                    },
+                    "text": {
+                      "status": "generated",
+                      "div": "<div xmlns=\"http://www.w3.org/1999/xhtml\">Adaeze Ngozi Okafor, F, 1989-04-12</div>"
+                    },
+                    "extension": [
+                      {
+                        "url": "http://ship.gov.ng/fhir/StructureDefinition/patient-tribe",
+                        "valueString": "Igbo"
+                      },
+                      {
+                        "url": "http://hl7.org/fhir/StructureDefinition/patient-birthPlace",
+                        "valueAddress": {
+                          "city": "Enugu",
+                          "state": "Enugu",
+                          "country": "NG"
+                        }
+                      }
+                    ],
+                    "identifier": [
+                      {
+                        "use": "official",
+                        "system": "http://ship.gov.ng/nin",
+                        "value": "12345678901",
+                        "type": {
+                          "coding": [
+                            { "system": "http://terminology.hl7.org/CodeSystem/v2-0203", "code": "NI", "display": "National identifier" }
+                          ]
+                        }
+                      },
+                      {
+                        "use": "secondary",
+                        "system": "http://luth.org/mrn",
+                        "value": "MRN-0098213",
+                        "assigner": { "display": "Lagos University Teaching Hospital" }
+                      }
+                    ],
+                    "active": true,
+                    "name": [
+                      {
+                        "use": "official",
+                        "family": "Okafor",
+                        "given": [ "Adaeze", "Ngozi" ],
+                        "prefix": [ "Mrs" ]
+                      },
+                      {
+                        "use": "maiden",
+                        "family": "Eze",
+                        "given": [ "Adaeze" ]
+                      }
+                    ],
+                    "telecom": [
+                      { "system": "phone", "value": "+2348031234567", "use": "mobile", "rank": 1 },
+                      { "system": "email", "value": "adaeze.okafor@example.com", "use": "home" }
+                    ],
+                    "gender": "female",
+                    "birthDate": "1989-04-12",
+                    "deceasedBoolean": false,
+                    "address": [
+                      {
+                        "use": "home",
+                        "type": "physical",
+                        "line": [ "14 Bourdillon Road", "Ikoyi" ],
+                        "city": "Lagos",
+                        "district": "Eti-Osa",
+                        "state": "Lagos",
+                        "postalCode": "101233",
+                        "country": "NG"
+                      }
+                    ],
+                    "maritalStatus": {
+                      "coding": [
+                        { "system": "http://terminology.hl7.org/CodeSystem/v3-MaritalStatus", "code": "M", "display": "Married" }
+                      ]
+                    },
+                    "multipleBirthInteger": 2,
+                    "contact": [
+                      {
+                        "relationship": [
+                          {
+                            "coding": [
+                              { "system": "http://terminology.hl7.org/CodeSystem/v2-0131", "code": "C", "display": "Emergency Contact" }
+                            ]
+                          }
+                        ],
+                        "name": { "family": "Okafor", "given": [ "Chukwuemeka" ] },
+                        "telecom": [ { "system": "phone", "value": "+2348059876543", "use": "mobile" } ],
+                        "gender": "male"
+                      }
+                    ],
+                    "communication": [
+                      {
+                        "language": {
+                          "coding": [ { "system": "urn:ietf:bcp:47", "code": "ig", "display": "Igbo" } ]
+                        },
+                        "preferred": true
+                      },
+                      {
+                        "language": {
+                          "coding": [ { "system": "urn:ietf:bcp:47", "code": "en", "display": "English" } ]
+                        },
+                        "preferred": false
+                      }
+                    ],
+                    "generalPractitioner": [ { "reference": "Practitioner/dr-emeka-123", "display": "Dr. Emeka Obi" } ],
+                    "managingOrganization": { "reference": "Organization/luth", "display": "Lagos University Teaching Hospital" }
+                  }
+                }
+                """;
+
+            var client = _factory.CreateClient();
+            var request = BuildSignedRequest(body, IngestEndToEndFactory.ClientId, IngestEndToEndFactory.ClientSecret);
+
+            var response = await client.SendAsync(request);
+            _out.WriteLine($"POST {IngestPath} -> {(int)response.StatusCode} {response.StatusCode}");
+            _out.WriteLine($"correlationId = {correlationId}");
+            Assert.Equal(HttpStatusCode.Accepted, response.StatusCode);
+
+            // Read back from MongoDB using the unique (clientId, facilityId, correlationId) tuple.
+            var mongo = new MongoClient(IngestEndToEndFactory.ConnectionString);
+            var collection = mongo.GetDatabase(IngestEndToEndFactory.DatabaseName)
+                                  .GetCollection<BsonDocument>("transformed_pool_patients");
+
+            var filter = Builders<BsonDocument>.Filter.And(
+                Builders<BsonDocument>.Filter.Eq("clientId", IngestEndToEndFactory.ClientId),
+                Builders<BsonDocument>.Filter.Eq("facilityId", facilityId),
+                Builders<BsonDocument>.Filter.Eq("correlationId", correlationId));
+
+            var persisted = await collection.Find(filter).FirstOrDefaultAsync();
+            Assert.NotNull(persisted);
+
+            _out.WriteLine("--- persisted MongoDB document (shipses.transformed_pool_patients) ---");
+            _out.WriteLine(persisted.ToJson(new MongoDB.Bson.IO.JsonWriterSettings { Indent = true }));
+
+            // The EMR callback URL the transmitter will notify on completion.
+            Assert.Equal(callbackUrl, persisted["clientEMRCallbackUrl"].AsString);
+            // Persistence metadata + identity fields.
+            Assert.Equal(shipService, persisted["targetSystem"].AsString);
+            Assert.Equal(shipService, persisted["shipService"].AsString);
+            Assert.Equal(1, persisted["schemaVersion"].AsInt32);
+            Assert.Equal("R4", persisted["fhirVersion"].AsString);
+            Assert.Equal("Patient", persisted["resourceType"].AsString);
+            Assert.Equal("Pending", persisted["status"].AsString);
+            Assert.Equal("API", persisted["extractSource"].AsString);
+            // The nested FHIR body round-tripped intact.
+            Assert.Equal("Okafor", persisted["fhirJson"]["name"][0]["family"].AsString);
+        }
+
         private static async Task AssertMongoIsReachable()
         {
             try
