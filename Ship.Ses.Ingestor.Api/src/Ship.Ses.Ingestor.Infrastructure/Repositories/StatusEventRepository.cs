@@ -1,4 +1,5 @@
 ﻿using Microsoft.Extensions.Options;
+using MongoDB.Bson;
 using MongoDB.Driver;
 using Ship.Ses.Ingestor.Application.Interfaces;
 using Ship.Ses.Ingestor.Domain.Patients;
@@ -32,26 +33,126 @@ namespace Ship.Ses.Ingestor.Infrastructure.Repositories
             _database = client.GetDatabase(settings.Value.DatabaseName);
             _col = _database.GetCollection<StatusEvent>("fhirstatusevents");
         }
-        public async Task<(StatusEvent persisted, bool duplicate, bool conflict)>  UpsertStatusEventAsync(StatusEvent incoming, CancellationToken ct)
+        /// <summary>
+        /// Correlates a SHIP callback onto the shared <c>fhirstatusevents</c> document via a single
+        /// atomic aggregation-pipeline upsert keyed on <c>transactionId</c>. Never blind-inserts.
+        /// <para>
+        /// SHIP is authoritative over PROBE. The authoritative fields (<c>source</c>, <c>status</c>,
+        /// <c>message</c>, <c>shipId</c>, <c>receivedAtUtc</c>, <c>payloadHash</c>, <c>headers</c>,
+        /// <c>data</c>) are always written; identity/routing fields are filled only when missing so a
+        /// Transmitter seed is never clobbered. The EMR outbox is preserved except:
+        /// on a fresh insert it starts at Pending/now; and when a SHIP status differs from an
+        /// already-delivered stored status (<c>callbackStatus == "Succeeded"</c>) exactly one corrective
+        /// delivery is re-armed. Because the stored status is overwritten to the SHIP value in the same
+        /// operation, a later repeat of that corrected outcome compares equal and does not re-arm.
+        /// </para>
+        /// </summary>
+        public async Task<(StatusEvent persisted, StatusCallbackOutcome outcome)> UpsertStatusEventAsync(StatusEvent incoming, CancellationToken ct)
         {
-            try
+            if (incoming is null) throw new ArgumentNullException(nameof(incoming));
+            if (string.IsNullOrWhiteSpace(incoming.TransactionId))
+                throw new ArgumentException("transactionId is required to correlate a status callback.", nameof(incoming));
+
+            var filter = Builders<StatusEvent>.Filter.Eq(x => x.TransactionId, incoming.TransactionId);
+            var update = Builders<StatusEvent>.Update.Pipeline(BuildUpsertPipeline(incoming));
+
+            // The unique partial index on transactionId makes concurrent upserts of a not-yet-seeded txn
+            // safe: one wins the insert, the loser gets a duplicate-key error and retries as a plain
+            // in-place update (the document now exists), so at most one document ever exists per txn.
+            for (var attempt = 0; ; attempt++)
             {
-                await _col.InsertOneAsync(incoming, cancellationToken: ct);
-                return (incoming, duplicate: false, conflict: false);
+                try
+                {
+                    var result = await _col.UpdateOneAsync(filter, update, new UpdateOptions { IsUpsert = true }, ct);
+
+                    StatusCallbackOutcome outcome;
+                    if (result.UpsertedId is not null)
+                        outcome = StatusCallbackOutcome.Inserted;
+                    else if (result.IsModifiedCountAvailable && result.ModifiedCount > 0)
+                        outcome = StatusCallbackOutcome.Updated;
+                    else
+                        outcome = StatusCallbackOutcome.Unchanged;
+
+                    // The response only needs transactionId/status/receivedAtUtc, all written unconditionally,
+                    // so the incoming projection already reflects the persisted authoritative values.
+                    return (incoming, outcome);
+                }
+                catch (MongoWriteException ex)
+                    when (attempt == 0 && ex.WriteError?.Category == ServerErrorCategory.DuplicateKey)
+                {
+                    // Lost the insert race; the document now exists — retry as an in-place update.
+                }
             }
-            catch (MongoWriteException ex) when (ex.WriteError?.Category == ServerErrorCategory.DuplicateKey)
+        }
+
+        /// <summary>
+        /// Builds the aggregation-pipeline <c>$set</c> stage implementing the enrich + conditional
+        /// outbox re-arm policy in one server-side operation. Field references (<c>$status</c>,
+        /// <c>$callbackStatus</c>) read the pre-update document; on an upsert-insert they are missing.
+        /// </summary>
+        private static PipelineDefinition<StatusEvent, StatusEvent> BuildUpsertPipeline(StatusEvent incoming)
+        {
+            // $literal keeps caller-supplied values (which may contain '$' or look like field paths)
+            // from being interpreted as aggregation expressions.
+            static BsonValue Lit(string? s) => new BsonDocument("$literal", s is null ? BsonNull.Value : new BsonString(s));
+            static BsonDocument Cond(BsonValue ifExpr, BsonValue then, BsonValue @else) =>
+                new BsonDocument("$cond", new BsonArray { ifExpr, then, @else });
+            static BsonValue IfNull(string field, string? incomingValue) =>
+                new BsonDocument("$ifNull", new BsonArray { "$" + field, Lit(incomingValue) });
+
+            // On an upsert-insert callbackStatus is absent; on any existing document it is present.
+            var isInsert = new BsonDocument("$eq",
+                new BsonArray { new BsonDocument("$type", "$callbackStatus"), "missing" });
+
+            // The SHIP status differs from what is stored AND the event was already delivered.
+            var reArm = new BsonDocument("$and", new BsonArray
             {
-                var existing = await _col.Find(x => x.TransactionId == incoming.TransactionId)
-                                         .FirstOrDefaultAsync(ct);
+                new BsonDocument("$ne", new BsonArray { "$status", Lit(incoming.Status) }),
+                new BsonDocument("$eq", new BsonArray { "$callbackStatus", "Succeeded" })
+            });
 
-                if (existing is null) return (incoming, false, conflict: true);
+            BsonValue receivedAt = new BsonDateTime(DateTime.SpecifyKind(incoming.ReceivedAtUtc, DateTimeKind.Utc));
+            BsonValue data = incoming.Data is null
+                ? new BsonDocument("$literal", BsonNull.Value)
+                : new BsonDocument("$literal", incoming.Data);
 
-                var same = existing.PayloadHash == incoming.PayloadHash
-                           && existing.Status == incoming.Status
-                           && existing.ShipId == incoming.ShipId;
+            var set = new BsonDocument
+            {
+                // Correlation key (redundant with the filter on insert; identical on update).
+                { "transactionId", Lit(incoming.TransactionId) },
 
-                return (existing, duplicate: same, conflict: !same);
-            }
+                // Authoritative SHIP fields — always overwritten.
+                { "source", "SHIP" },
+                { "status", Lit(incoming.Status) },
+                { "message", Lit(incoming.Message) },
+                { "shipId", Lit(incoming.ShipId) },
+                { "receivedAtUtc", receivedAt },
+                { "payloadHash", Lit(incoming.PayloadHash) },
+                { "headers", Lit(incoming.Headers) },
+                { "data", data },
+
+                // Identity / routing — fill only when the stored document lacks them (never clobber a seed).
+                { "correlationId", IfNull("correlationId", incoming.CorrelationId) },
+                { "clientId", IfNull("clientId", incoming.ClientId) },
+                { "facilityId", IfNull("facilityId", incoming.FacilityId) },
+                { "resourceType", IfNull("resourceType", incoming.ResourceType) },
+                { "resourceId", IfNull("resourceId", incoming.ResourceId) },
+                { "shipService", IfNull("shipService", incoming.ShipService) },
+                { "emrTargetUrl", IfNull("emrTargetUrl", incoming.EmrTargetUrl) },
+
+                // EMR outbox — default on insert, re-arm exactly one corrective delivery, else preserve.
+                { "callbackStatus", Cond(isInsert, "Pending", Cond(reArm, "Pending", "$callbackStatus")) },
+                { "callbackNextAttemptAt", Cond(isInsert, "$$NOW", Cond(reArm, "$$NOW", "$callbackNextAttemptAt")) },
+                { "callbackLastError", Cond(isInsert, BsonNull.Value, Cond(reArm, BsonNull.Value, "$callbackLastError")) },
+                { "callbackAttempts", Cond(isInsert, 0, "$callbackAttempts") },
+                { "callbackDeliveredAt", Cond(isInsert, BsonNull.Value, "$callbackDeliveredAt") }
+            };
+
+            PipelineDefinition<StatusEvent, StatusEvent> pipeline = new BsonDocument[]
+            {
+                new BsonDocument("$set", set)
+            };
+            return pipeline;
         }
 
         /// <summary>

@@ -213,6 +213,10 @@ else
     app.Logger.LogWarning("⚠️ Could not determine server addresses (no IServerAddressesFeature found).");
 }
 
+// Best-effort, idempotent ensure of the Transmitter-owned partial unique index on
+// fhirstatusevents.transactionId, so upsert-by-transactionId enforces one document per txn.
+await app.EnsureStatusEventIndexesAsync();
+
 app.LogEffectiveConfiguration();
 
 app.Logger.LogInformation("SHIP SeS Ingestor API started and ready to accept requests");
