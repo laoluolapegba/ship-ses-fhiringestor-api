@@ -148,6 +148,9 @@ app.UseSwaggerUI(options =>
     options.DocumentTitle = "SHIP SES Ingestor – API Docs";
 });
 
+// Convenience redirect so /swagger lands on the Swagger UI (served at /docs).
+app.MapGet("/swagger", () => Results.Redirect("/docs", permanent: false));
+
 // Configure the HTTP request pipeline.
 if (app.Environment.IsDevelopment())
 {
