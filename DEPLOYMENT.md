@@ -16,8 +16,9 @@ something is misconfigured.
 | Dependency | Used for | Failure symptom if missing |
 |---|---|---|
 | **MongoDB** | Persisting ingested FHIR sync records | App fails to start (no connection string) or `/health` returns 503 |
-| **HashiCorp Vault** | Source of per-client HMAC signing secrets, loaded once at startup | Every signed request rejected with `401` |
 | **OIDC IdP (Keycloak)** | JWT bearer validation | App fails to start (Authority missing) or all requests `401` |
+
+Per-client HMAC signing secrets are read from configuration (`AppSettings:Clients`) once at startup — see §3.5. If no clients are configured, every signed request is rejected with `401`.
 
 ---
 
@@ -33,7 +34,8 @@ Configuration is layered; later sources override earlier ones:
 
 - **.NET configuration keys** use a double underscore `__` as the section separator.
   `AppSettings:Authentication:Authority` → `AppSettings__Authentication__Authority`
-- **Vault connection settings** are read as **plain OS environment variables** (not `__`, not under `AppSettings`): `VAULT_ADDR`, `VAULT_TOKEN`, etc.
+- **Array entries** use a numeric index segment, e.g. the first HMAC client's signing secret is
+  `AppSettings:Clients:0:HmacSecret` → `AppSettings__Clients__0__HmacSecret`.
 
 > Never put HMAC client secrets or the Mongo password into `appsettings.json`. Use env vars / Kubernetes Secrets.
 
@@ -74,7 +76,7 @@ These are **generic, non-secret** policy values (no client id or secret lives he
 
 | Variable | Required | Default | Description |
 |---|---|---|---|
-| `AppSettings__Hmac__Enabled` | No | `true` | Master switch for HMAC enforcement. If `false`, no Vault load and no signature checks. |
+| `AppSettings__Hmac__Enabled` | No | `true` | Master switch for HMAC enforcement. If `false`, no client load and no signature checks. |
 | `AppSettings__Hmac__RequireJwtAlso` | No | `true` | Require a valid JWT in addition to a valid signature. |
 | `AppSettings__Hmac__SignatureHeader` | No | `X-SHIP-Signature` | Signature header name. |
 | `AppSettings__Hmac__TimestampHeader` | No | `X-SHIP-Date` | Unix-seconds timestamp header. |
@@ -83,19 +85,19 @@ These are **generic, non-secret** policy values (no client id or secret lives he
 | `AppSettings__Hmac__HmacAlgo` | No | `HMACSHA256` | Signing algorithm (`HMACSHA256` or `HMACSHA512`). |
 | `AppSettings__Hmac__BypassPaths__0` | No | `/health` | Paths exempt from HMAC (matched by path segments). Defaults to `/health` so probes work; add more as `__1`, `__2`, … |
 
-### 3.5 Vault (per-client HMAC secrets) — plain OS env vars
+### 3.5 Per-client HMAC secrets — section `AppSettings:Clients`
+
+Clients are declared as an array under `AppSettings:Clients`. Each entry is loaded once at startup;
+adding or rotating a client requires an application restart. Secret values must be supplied via
+environment variables (or Kubernetes Secrets), not committed to `appsettings.json`. Repeat the block
+for each client, incrementing the index (`__0__`, `__1__`, …).
 
 | Variable | Required | Default | Description |
 |---|---|---|---|
-| `VAULT_ADDR` | **Yes** (when HMAC enabled) | — | Vault base URL, e.g. `https://vault.internal:8200`. |
-| `VAULT_TOKEN` | **Yes** (when HMAC enabled) | — | Vault token. Needs `list` on the prefix and `read` on the client paths. **Secret.** |
-| `VAULT_HMAC_MOUNT` | No | `secret` | KV mount point. |
-| `VAULT_HMAC_KV_VERSION` | No | `2` | KV engine version (controls the `data`/`metadata` path segments). |
-| `VAULT_HMAC_PATH_TEMPLATE` | No | `emr-clients/{clientId}/hmac` | **Logical** path template. Do **not** include `data`/`metadata` — the app inserts those for KV v2. |
-| `VAULT_HMAC_SECRET_KEY` | No | `clientSecret` | Field inside the secret holding the HMAC key. |
-| `VAULT_HMAC_STATUS_KEY` | No | `status` | Optional field; value `revoked`/`inactive` disables the client. |
-| `VAULT_HMAC_IS_ACTIVE_KEY` | No | `isActive` | Optional boolean field. |
-| `VAULT_HMAC_IS_REVOKED_KEY` | No | `isRevoked` | Optional boolean field. |
+| `AppSettings__Clients__0__ClientId` | **Yes** (when HMAC enabled) | — | Must exactly match the caller's Keycloak `client_id`/`azp` claim. |
+| `AppSettings__Clients__0__HmacSecret` | **Yes** (when HMAC enabled) | — | The key used to verify request signatures. **Secret.** Entries without it are skipped. |
+| `AppSettings__Clients__0__ClientSecret` | No | — | The client's OAuth secret; carried for completeness, not used by HMAC validation. |
+| `AppSettings__Clients__0__Status` | No | `ACTIVE` | `ACTIVE` (or absent) enables the client; `REVOKED` marks it revoked; any other value marks it inactive. Non-active clients get `403`. |
 
 ### 3.6 Rate limiting — section `AppSettings:RateLimiting`
 
@@ -126,37 +128,22 @@ Provision a database and a user with read/write. Supply the connection string an
 
 ### 4.2 OIDC / Keycloak
 - Create (or reuse) a realm and an API client; set `AppSettings__Authentication__Authority` to the realm issuer URL and `Audience` to the API client id.
-- Clients authenticate to Keycloak and present a JWT whose `client_id` (or `azp`) claim **must exactly match** the Vault client folder name (see below).
+- Clients authenticate to Keycloak and present a JWT whose `client_id` (or `azp`) claim **must exactly match** the configured `ClientId` (see below).
 
-### 4.3 Vault — per-client HMAC secrets
+### 4.3 Per-client HMAC secrets
 
-The Ingestor reads all client secrets **once at startup**. The **path folder name is the ClientId** and must match the JWT `client_id`/`azp`. The HMAC key is stored in the `clientSecret` field.
+The Ingestor reads all client credentials from configuration (`AppSettings:Clients`) **once at startup**. Each entry's `ClientId` must match the JWT `client_id`/`azp`, and its `HmacSecret` is the shared signing key.
 
-**Store each client (KV v2):**
+**Supply each client via environment variables (or Kubernetes Secrets):**
 ```bash
-# CLI hides the "data" segment; this writes to secret/data/emr-clients/emr-a/hmac
-vault kv put secret/emr-clients/emr-a/hmac \
-    clientSecret="<long-random-high-entropy-key>" \
-    isActive=true
+AppSettings__Clients__0__ClientId=emr-a
+AppSettings__Clients__0__HmacSecret=<long-random-high-entropy-key>
+AppSettings__Clients__0__Status=ACTIVE
+# add more clients by incrementing the index: __1__, __2__, …
 ```
-The same `clientSecret` value is the shared signing key and must also be given to that client so requests can be signed.
+The same `HmacSecret` value must also be given to that client so requests can be signed.
 
-**Policy the token needs:**
-```hcl
-# read each client's hmac secret
-path "secret/data/emr-clients/*" {
-  capabilities = ["read"]
-}
-# list the registered clients (startup discovery)
-path "secret/metadata/emr-clients" {
-  capabilities = ["list"]
-}
-```
-```bash
-vault policy write ses-ingestor-hmac ses-ingestor-hmac.hcl
-```
-
-> **Adding/rotating a client requires an application restart** — the in-memory client set is built once at startup. There are no per-request Vault calls and no TTL refresh.
+> **Adding/rotating a client requires an application restart** — the in-memory client set is built once at startup. There are no per-request lookups and no TTL refresh.
 
 See `README.md` → "HMAC client credential resolution" for the request-signing contract.
 
@@ -164,18 +151,17 @@ See `README.md` → "HMAC client credential resolution" for the request-signing 
 
 ## 5. Health endpoint
 
-- **`GET /health`** — pings MongoDB. Returns `200 {status:"healthy"}`, `206` degraded, or `503` unhealthy. It does **not** check Vault or the IdP. It is **exempt from HMAC** (via `Hmac.BypassPaths`), so probes do not need to be signed/authenticated.
+- **`GET /health`** — pings MongoDB. Returns `200 {status:"healthy"}`, `206` degraded, or `503` unhealthy. It does **not** check the IdP. It is **exempt from HMAC** (via `Hmac.BypassPaths`), so probes do not need to be signed/authenticated.
 - API docs (non-prod aids): Swagger JSON is served; Scalar UI at `/` docs is enabled only in `Development`.
 
 ---
 
 ## 6. Startup logs to verify a good deployment
 
-On boot the service logs a **configuration summary** plus the Vault load result. A healthy start looks like:
+On boot the service logs a **configuration summary** plus the client load result. A healthy start looks like:
 
 ```
-Vault HMAC load: discovering clients at https://vault.internal:8200 (mount 'secret', KV v2, list prefix 'emr-clients'). ...
-Vault HMAC credential load complete: 3 client(s) loaded into memory.
+HMAC client load complete: 3 client(s) loaded from configuration.
 Startup configuration summary:
   Environment             : Production
   Auth.Authority          : https://idp.example/realms/ship
@@ -183,15 +169,13 @@ Startup configuration summary:
   Mongo.DatabaseName      : shipses
   Mongo.ConnectionString  : set
   HMAC.Enabled            : True (algo HMACSHA256, requireJwtAlso True, clockSkew 300s)
+  HMAC clients configured : 3
   HMAC clients loaded     : 3
-  Vault.Addr              : https://vault.internal:8200
-  Vault.Token             : set
-  Vault.Mount/KV/Template : secret / v2 / emr-clients/{clientId}/hmac
   RateLimiting.Enabled    : True
 SHIP SeS Ingestor API started and ready to accept requests
 ```
 
-If **HMAC is enabled but 0 clients loaded**, the service logs a loud `ERROR` naming the three likely causes (token/reachability, missing `list`/`read` capability, no secrets under the prefix). `(NOT SET)` next to any field means that variable was not provided to the container.
+If **HMAC is enabled but 0 clients loaded**, the service logs a loud `ERROR`: check that `AppSettings:Clients` is populated (via appsettings or `AppSettings__Clients__<n>__ClientId` / `__HmacSecret` env vars) and that each entry has a non-empty `ClientId` and `HmacSecret`. `(NOT SET)` next to any field means that variable was not provided to the container.
 
 ---
 
@@ -200,9 +184,8 @@ If **HMAC is enabled but 0 clients loaded**, the service logs a loud `ERROR` nam
 - [ ] `AppSettings__Authentication__Authority` set to the real IdP (HTTPS, reachable).
 - [ ] `AppSettings__Authentication__Audience` matches the API client id.
 - [ ] `SourceDbSettings__ConnectionString` + `__DatabaseName` point at the real Mongo.
-- [ ] `VAULT_ADDR` + `VAULT_TOKEN` set; token has `list` + `read` per §4.3.
-- [ ] At least one client secret exists in Vault under the prefix.
-- [ ] Each Vault client folder name equals the client's Keycloak `client_id`/`azp`.
+- [ ] At least one client is configured under `AppSettings:Clients` with a non-empty `ClientId` and `HmacSecret` (per §4.3).
+- [ ] Each client's `ClientId` equals the client's Keycloak `client_id`/`azp`.
 - [ ] TLS terminated (ingress) or cert provided to Kestrel.
 
 ---
@@ -213,9 +196,9 @@ If **HMAC is enabled but 0 clients loaded**, the service logs a loud `ERROR` nam
 |---|---|---|
 | App exits at startup: *"Authority is required"* | `AppSettings__Authentication__Authority` missing | Set it (HTTPS issuer URL) |
 | App exits: *"SourceDbSettings:ConnectionString is not configured"* | Mongo connection string empty | Set `SourceDbSettings__ConnectionString` |
-| **Every** request `401`, even correctly signed | 0 HMAC clients loaded from Vault | Check the `Vault HMAC load` / `ERROR` lines: token, reachability, `list`/`read` capability, secrets exist |
-| One client gets `401` "Unknown client" | JWT `client_id`/`azp` ≠ Vault folder name | Align the names |
-| Requests `403` | Client marked `isActive:false` / `isRevoked:true` in Vault | Update the Vault secret + restart |
+| **Every** request `401`, even correctly signed | 0 HMAC clients loaded from configuration | Check the `HMAC client load` / `ERROR` lines: `AppSettings:Clients` populated, each entry has `ClientId` + `HmacSecret` |
+| One client gets `401` "Unknown client" | JWT `client_id`/`azp` ≠ configured `ClientId` | Align the names |
+| Requests `403` | Client `Status` is not `ACTIVE` (inactive/revoked) | Set `Status=ACTIVE` + restart |
 | `400` "Missing X-SHIP-Date/Nonce" | Caller isn't signing requests | Configure the client to send the HMAC headers |
 | `401` after a few minutes of clock drift | Timestamp outside `AllowedClockSkewSeconds` | Sync clocks / raise skew |
 | `/health` returns `503` | Mongo unreachable | Check connection string / network |

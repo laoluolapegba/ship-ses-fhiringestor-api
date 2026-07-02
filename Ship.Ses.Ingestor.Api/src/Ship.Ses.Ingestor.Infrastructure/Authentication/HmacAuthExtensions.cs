@@ -13,8 +13,9 @@ namespace Ship.Ses.Ingestor.Infrastructure.Authentication
         public static IServiceCollection AddHmacAuth(this IServiceCollection services, IConfiguration config)
         {
             services.Configure<HmacAuthSettings>(config.GetSection("AppSettings:Hmac"));
+            services.Configure<HmacClientRegistryOptions>(config.GetSection("AppSettings"));
             services.AddMemoryCache();
-            services.AddHttpClient<VaultClientHmacCredentialLoader>();
+            services.TryAddSingleton<ConfigurationClientHmacCredentialLoader>();
             services.TryAddSingleton<InMemoryClientHmacCredentialRegistry>();
             services.TryAddSingleton<IClientHmacCredentialRegistry>(sp => sp.GetRequiredService<InMemoryClientHmacCredentialRegistry>());
             services.TryAddSingleton<IClientCredentialResolver, ClientCredentialResolver>();
@@ -30,12 +31,12 @@ namespace Ship.Ses.Ingestor.Infrastructure.Authentication
                 return app;
             }
 
-            // Load every registered client's HMAC secret from Vault once, before any request is served.
-            // No per-request Vault calls happen afterwards; a restart is required to pick up new or rotated clients.
-            var loader = app.ApplicationServices.GetRequiredService<VaultClientHmacCredentialLoader>();
+            // Load every registered client's HMAC secret from configuration once, before any request is served.
+            // Configuration (appsettings / environment variables) is the sole source of truth; a restart is
+            // required to pick up new or rotated clients.
+            var loader = app.ApplicationServices.GetRequiredService<ConfigurationClientHmacCredentialLoader>();
             var registry = app.ApplicationServices.GetRequiredService<InMemoryClientHmacCredentialRegistry>();
-            var clients = loader.LoadAllAsync(CancellationToken.None).GetAwaiter().GetResult();
-            registry.Initialize(clients);
+            registry.Initialize(loader.LoadAll());
 
             app.UseMiddleware<HmacAuthMiddleware>();
             return app;

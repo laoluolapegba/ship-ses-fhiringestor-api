@@ -10,7 +10,7 @@ namespace Ship.Ses.Ingestor.WebApi.Installers
     /// Emits a single, redacted summary of the effective runtime configuration at startup, plus a
     /// loud error when a misconfiguration would silently reject every request. Intended to give the
     /// team deploying this service enough to diagnose a first deployment from the logs alone.
-    /// No secret values (Vault token, Mongo connection string) are written to the log.
+    /// No secret values (client/HMAC secrets, Mongo connection string) are written to the log.
     /// </summary>
     public static class StartupDiagnostics
     {
@@ -28,13 +28,7 @@ namespace Ship.Ses.Ingestor.WebApi.Installers
 
             var hmac = app.Services.GetRequiredService<IOptions<HmacAuthSettings>>().Value;
             var clientCount = app.Services.GetService<InMemoryClientHmacCredentialRegistry>()?.Count ?? 0;
-
-            var vaultAddr = Environment.GetEnvironmentVariable("VAULT_ADDR");
-            var vaultTokenSet = !string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("VAULT_TOKEN"));
-            var vaultMount = Environment.GetEnvironmentVariable("VAULT_HMAC_MOUNT") ?? "secret";
-            var vaultKv = Environment.GetEnvironmentVariable("VAULT_HMAC_KV_VERSION") ?? "2";
-            var vaultTemplate = Environment.GetEnvironmentVariable("VAULT_HMAC_PATH_TEMPLATE") ?? "emr-clients/{clientId}/hmac";
-            var vaultPrefix = ListPrefixOf(vaultTemplate);
+            var configuredClientCount = cfg.GetSection("AppSettings:Clients").GetChildren().Count();
 
             var rlEnabled = cfg.GetValue("AppSettings:RateLimiting:Enabled", true);
 
@@ -47,10 +41,8 @@ namespace Ship.Ses.Ingestor.WebApi.Installers
                 "  Mongo.DatabaseName      : {MongoDb}\n" +
                 "  Mongo.ConnectionString  : {MongoConn}\n" +
                 "  HMAC.Enabled            : {HmacEnabled} (algo {Algo}, requireJwtAlso {ReqJwt}, clockSkew {Skew}s)\n" +
+                "  HMAC clients configured : {ConfiguredClientCount}\n" +
                 "  HMAC clients loaded     : {ClientCount}\n" +
-                "  Vault.Addr              : {VaultAddr}\n" +
-                "  Vault.Token             : {VaultToken}\n" +
-                "  Vault.Mount/KV/Template : {Mount} / v{Kv} / {Template}\n" +
                 "  RateLimiting.Enabled    : {RateLimiting}",
                 app.Environment.EnvironmentName,
                 Environment.GetEnvironmentVariable("ASPNETCORE_URLS") ?? "(default)",
@@ -59,32 +51,22 @@ namespace Ship.Ses.Ingestor.WebApi.Installers
                 Display(mongoDb),
                 string.IsNullOrWhiteSpace(mongoConn) ? "(NOT SET)" : "set",
                 hmac.Enabled, hmac.HmacAlgo, hmac.RequireJwtAlso, hmac.AllowedClockSkewSeconds,
+                configuredClientCount,
                 clientCount,
-                Display(vaultAddr),
-                vaultTokenSet ? "set" : "(NOT SET)",
-                vaultMount, vaultKv, vaultTemplate,
                 rlEnabled);
 
             if (hmac.Enabled && clientCount == 0)
             {
                 log.LogError(
-                    "HMAC is ENABLED but 0 clients were loaded from Vault — every signed request will be rejected with 401. " +
-                    "Check, in order: (1) VAULT_ADDR and VAULT_TOKEN are set and Vault is reachable; " +
-                    "(2) the Vault token has 'list' capability on {Mount}/metadata/{Prefix} and 'read' on {Mount}/data/{Prefix}/*; " +
-                    "(3) at least one client secret exists under that prefix. See the 'Vault HMAC load' log lines above for the exact target and failure reason.",
-                    vaultMount, vaultPrefix, vaultMount, vaultPrefix);
+                    "HMAC is ENABLED but 0 clients were loaded from configuration — every signed request will be rejected with 401. " +
+                    "Check, in order: (1) the 'AppSettings:Clients' array is populated (via appsettings or " +
+                    "'AppSettings__Clients__<n>__ClientId' / '__HmacSecret' environment variables); " +
+                    "(2) each entry has a non-empty ClientId and HmacSecret. See the 'HMAC client load' log lines above for skipped entries.");
             }
 
             return app;
         }
 
         private static string Display(string? value) => string.IsNullOrWhiteSpace(value) ? "(NOT SET)" : value;
-
-        private static string ListPrefixOf(string template)
-        {
-            var idx = template.IndexOf("{clientId}", StringComparison.Ordinal);
-            var prefix = idx >= 0 ? template[..idx] : template;
-            return prefix.Trim('/');
-        }
     }
 }

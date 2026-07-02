@@ -1,21 +1,21 @@
 using System.Security.Claims;
-using System.Text;
 using System.Text.Encodings.Web;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.AspNetCore.TestHost;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
-using Ship.Ses.Ingestor.Infrastructure.Authentication;
 
 namespace Ship.Ses.Ingestor.WebApi.IntegrationTests
 {
     /// <summary>
     /// End-to-end test host: real FhirIngestService -> real MongoSyncRepository -> real MongoDB.
-    /// Only the external edges (Vault HTTP, IdP) are stubbed so a signed request can hit the database
-    /// without standing up Vault or Keycloak. Mongo must actually be running and reachable.
+    /// Only the external edges (the HMAC client is supplied via configuration, the IdP is stubbed) so a
+    /// signed request can hit the database without standing up Vault or Keycloak. Mongo must actually be
+    /// running and reachable.
     /// </summary>
     public sealed class IngestEndToEndFactory : WebApplicationFactory<Program>
     {
@@ -23,16 +23,6 @@ namespace Ship.Ses.Ingestor.WebApi.IntegrationTests
         public const string ClientSecret = "test-secret-a";
         public const string DatabaseName = "shipses";
         public const string ConnectionString = "mongodb://localhost:27017";
-
-        public IngestEndToEndFactory()
-        {
-            Environment.SetEnvironmentVariable("VAULT_ADDR", "http://vault.test");
-            Environment.SetEnvironmentVariable("VAULT_TOKEN", "test-token");
-            Environment.SetEnvironmentVariable("VAULT_HMAC_MOUNT", "secret");
-            Environment.SetEnvironmentVariable("VAULT_HMAC_KV_VERSION", "2");
-            Environment.SetEnvironmentVariable("VAULT_HMAC_PATH_TEMPLATE", "emr-clients/{clientId}/hmac");
-            Environment.SetEnvironmentVariable("VAULT_HMAC_SECRET_KEY", "clientSecret");
-        }
 
         protected override void ConfigureWebHost(IWebHostBuilder builder)
         {
@@ -42,12 +32,19 @@ namespace Ship.Ses.Ingestor.WebApi.IntegrationTests
             builder.UseSetting("SourceDbSettings:ConnectionString", ConnectionString);
             builder.UseSetting("SourceDbSettings:DatabaseName", DatabaseName);
 
+            // Supply one known HMAC client via configuration so the startup loader populates it.
+            builder.ConfigureAppConfiguration((_, config) =>
+            {
+                config.AddInMemoryCollection(new Dictionary<string, string?>
+                {
+                    ["AppSettings:Clients:0:ClientId"] = ClientId,
+                    ["AppSettings:Clients:0:HmacSecret"] = ClientSecret,
+                    ["AppSettings:Clients:0:Status"] = "ACTIVE"
+                });
+            });
+
             builder.ConfigureTestServices(services =>
             {
-                // Fake Vault HTTP so the startup loader populates one known client.
-                services.AddHttpClient<VaultClientHmacCredentialLoader>()
-                    .ConfigurePrimaryHttpMessageHandler(() => new FakeVaultHandler(ClientId, ClientSecret));
-
                 // Test authentication scheme supplies the client_id claim (no IdP needed).
                 services.AddAuthentication(options =>
                 {
