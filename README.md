@@ -2,7 +2,7 @@
 
 The **FHIR Ingestor API** is a lightweight, secure web API that allows Electronic Medical Record (EMR) systems to submit [FHIR](https://www.hl7.org/fhir/) compliant resources (e.g., `Patient`, `Encounter`) into the SHIP Edge Server (SES). These resources are stored in MongoDB and later processed and synchronized with the central Smart Health Information Platform (SHIP).
 
-> **Deploying this service?** See **[DEPLOYMENT.md](DEPLOYMENT.md)** for the full environment-variable reference, dependency setup (MongoDB / Keycloak / Vault), run examples, startup-log checks, and troubleshooting.
+> **Deploying this service?** See **[DEPLOYMENT.md](DEPLOYMENT.md)** for the full environment-variable reference, dependency setup (MongoDB / Keycloak), run examples, startup-log checks, and troubleshooting.
 
 ---
 
@@ -64,23 +64,31 @@ Authorization: Bearer <your-jwt-token>
 
 HMAC validation uses the authenticated caller identity from the JWT, not the ingest request body. The ingestor reads the client identity from `client_id`, falling back to `azp` when `client_id` is absent.
 
-Client-specific HMAC credentials are served from the in-memory client HMAC credential registry (`IClientHmacCredentialRegistry`), which is populated once at startup. SeS instance configuration must not contain client HMAC `ClientId` or `ClientSecret` values. `appsettings.json` may only hold generic HMAC validation settings such as header names, clock skew, enablement and algorithm policy.
+Client-specific HMAC credentials are served from the in-memory client HMAC credential registry (`IClientHmacCredentialRegistry`), which is populated once at startup.
 
-Vault is the authoritative source for per-client HMAC secrets. At application startup, `VaultClientHmacCredentialLoader` lists every registered client under the configured prefix and loads each client's secret into memory. There are no per-request Vault calls; adding or rotating a client requires an application restart to reload. The default secret path pattern is:
+Configuration is the authoritative source for per-client HMAC secrets. At application startup, `ConfigurationClientHmacCredentialLoader` reads the `AppSettings:Clients` array and loads each client's secret into memory. There are no per-request lookups; adding or rotating a client requires an application restart to reload. Each client is declared as:
 
-```text
-secret/data/emr-clients/{clientId}/hmac
+```json
+"AppSettings": {
+  "Clients": [
+    {
+      "ClientId": "ses-client-a",
+      "ClientSecret": "<oauth-client-secret>",
+      "HmacSecret": "<hmac-signing-secret>",
+      "Status": "ACTIVE"
+    }
+  ]
+}
 ```
 
-The client set is discovered by listing the prefix (`secret/metadata/emr-clients` for KV v2). For example, `client_id=emr-a` resolves to `secret/data/emr-clients/emr-a/hmac`. The Vault secret should expose the HMAC secret in `clientSecret` by default, with optional `isActive`, `isRevoked`, `status`, and `allowedAlgorithms` metadata. The Vault token requires `read` capability on each client path and `list` capability on the prefix. Vault connection details are supplied through environment variables, not SeS appsettings:
+`HmacSecret` is the key used to verify request signatures; `ClientSecret` is the client's OAuth secret and is carried for completeness but not used by HMAC validation. `Status` of `ACTIVE` (or absent) enables the client; any other value marks it inactive, and `REVOKED` marks it revoked (both yield `403`). The `ClientId` must exactly match the caller's Keycloak `client_id`/`azp` claim.
+
+Secret values are not committed to `appsettings.json`; in each deployment they are supplied through environment variables using the standard double-underscore convention (no Vault address or token is required):
 
 ```text
-VAULT_ADDR=https://vault.example
-VAULT_TOKEN=<vault token>
-VAULT_HMAC_MOUNT=secret
-VAULT_HMAC_KV_VERSION=2
-VAULT_HMAC_PATH_TEMPLATE=emr-clients/{clientId}/hmac
-VAULT_HMAC_SECRET_KEY=clientSecret
+AppSettings__Clients__0__ClientId=ses-client-a
+AppSettings__Clients__0__HmacSecret=<hmac-signing-secret>
+AppSettings__Clients__0__Status=ACTIVE
 ```
 
 `FacilityId` remains required source facility metadata. It is not a security credential, is not used for HMAC credential lookup, and must not be used as a fallback client identity.
