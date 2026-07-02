@@ -117,28 +117,29 @@ namespace Ship.Ses.Ingestor.Application.Services
 
             };
 
-            //) Upsert with  existing repo logic (unique on transactionId or (transactionId, source))
-            var (persisted, duplicate, conflict) = await _repository.UpsertStatusEventAsync(newEvent, cancellationToken);
+            // Correlate onto the shared fhirstatusevents document by transactionId via a single atomic
+            // upsert. SHIP is authoritative over PROBE: a divergent outcome converges the existing event
+            // (and re-arms one corrective EMR delivery when already delivered) rather than 409-conflicting.
+            var (persisted, outcome) = await _repository.UpsertStatusEventAsync(newEvent, cancellationToken);
 
-            if (conflict)
+            switch (outcome)
             {
-                _logger.LogError("Transaction Status already accepted for transactionId {TxId}. The incoming payload conflicts with an existing record.", request.TransactionId);
-                throw new InvalidOperationException("Conflicting payload for the same transactionId; existing record retained.");
-            }
-            else if (duplicate)
-            {
-                _logger.LogInformation("Callback received for transactionId {TxId}. record updated.", request.TransactionId);
-            }
-            else
-            {
-                _logger.LogInformation("Successfully recorded new status event for transactionId {TxId}.", request.TransactionId);
+                case StatusCallbackOutcome.Inserted:
+                    _logger.LogInformation("Recorded new SHIP status event for transactionId {TxId} with status {Status}.", request.TransactionId, persisted.Status);
+                    break;
+                case StatusCallbackOutcome.Updated:
+                    _logger.LogInformation("Converged existing status event for transactionId {TxId} to SHIP status {Status}.", request.TransactionId, persisted.Status);
+                    break;
+                default:
+                    _logger.LogInformation("Duplicate SHIP callback for transactionId {TxId}; existing status {Status} unchanged.", request.TransactionId, persisted.Status);
+                    break;
             }
 
             return new PatientTransmissionStatusResponse
             {
                 TransactionId = persisted.TransactionId,
                 StatusRecorded = persisted.Status,
-                Duplicate = duplicate,
+                Duplicate = outcome == StatusCallbackOutcome.Unchanged,
                 RecordedAt = new DateTimeOffset(persisted.ReceivedAtUtc, TimeSpan.Zero)
             };
         }

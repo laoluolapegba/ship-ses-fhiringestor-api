@@ -17,6 +17,18 @@
             No secret values (client/HMAC secrets, Mongo connection string) are written to the log.
             </summary>
         </member>
+        <member name="T:Ship.Ses.Ingestor.WebApi.Installers.StatusEventIndexInitializer">
+            <summary>
+            Best-effort, idempotent ensure of the partial unique index on <c>fhirstatusevents.transactionId</c>.
+            <para>
+            The Transmitter OWNS this index and creates it at its own startup; this ensure mirrors the exact
+            name and partial spec so, when both run, it is a no-op. It exists so the Ingestor's upsert-by-
+            transactionId still enforces the single-document invariant even if the Ingestor happens to start
+            first. It never fails startup: conflicts (an already-present compatible index) and connectivity
+            problems are logged and swallowed, and the attempt is time-boxed so a missing Mongo cannot stall boot.
+            </para>
+            </summary>
+        </member>
         <member name="M:Ship.Ses.Ingestor.Api.Helper.SafeMessageHelper.Sanitize(System.String)">
             <summary>
             Sanitizes a string for safe use in logs or user-facing messages by removing control characters like CR, LF, and tabs.
